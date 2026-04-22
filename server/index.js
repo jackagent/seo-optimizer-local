@@ -308,6 +308,66 @@ app.get('/api/companies/:id/fix-prompt', (req, res) => {
   res.json({ prompt, issueCount: issues.length, critical: critical.length, warnings: warnings.length });
 });
 
+// --- Seed Demo ---
+app.post('/api/seed-demo', (req, res) => {
+  try {
+    const allCompanies = db.getAllCompanies();
+    const existing = allCompanies.find(c => c.name && c.name.includes('(Demo)'));
+    if (existing) {
+      return res.json({ success: true, message: 'Demo company already exists' });
+    }
+    const company = db.createCompany({
+      name: 'Meridian Ventures GmbH (Demo)',
+      url: 'example.com',
+      sector: 'Venture Capital',
+      hosting_platform: 'Custom',
+      description: 'A demo company to explore Sentinel features. Delete anytime.'
+    });
+    db.upsertCompanyDetails(company.id, {
+      company_number: 'HRB 218456',
+      company_type: 'GmbH',
+      jurisdiction: 'Amtsgericht M\u00fcnchen',
+      registered_address: 'Maximilianstra\u00dfe 35a, 80539 M\u00fcnchen',
+      incorporation_date: '15.03.2021',
+      vat_number: 'DE345678901',
+      registered_email: 'info@meridian-ventures.de',
+      registered_phone: '+49 89 2180 7700',
+      lead_director: 'Dr. Alexander Hartmann',
+      lead_director_title: 'Gesch\u00e4ftsf\u00fchrer'
+    });
+    const scanId = db.createScan(company.id);
+    db.updateScan(scanId, {
+      status: 'completed',
+      overall_score: 68,
+      meta_score: 65,
+      content_score: 70,
+      technical_score: 78,
+      legal_score: 58,
+      has_impressum: 1,
+      has_privacy_policy: 1,
+      has_terms_of_service: 0,
+      impressum_completeness: 72,
+      pages_crawled: 4,
+      issues_json: JSON.stringify([
+        { severity: 'critical', category: 'legal', title: 'Missing Cookie Consent Banner', description: 'No cookie consent banner detected.', fix: 'Implement a GDPR-compliant cookie consent banner.' },
+        { severity: 'warning', category: 'legal', title: 'Missing Terms of Service', description: 'No terms of service page found.', fix: 'Create AGB/Terms of Service page.' },
+        { severity: 'warning', category: 'meta', title: 'Meta Description Too Short', description: 'Meta description is only 78 characters.', fix: 'Expand to 120-160 characters.' },
+        { severity: 'warning', category: 'content', title: 'Multiple H1 Tags', description: 'Found 3 H1 headings.', fix: 'Consolidate to a single H1.' },
+        { severity: 'info', category: 'meta', title: 'Missing Open Graph Tags', description: 'No OG title or image found.', fix: 'Add Open Graph meta tags.' }
+      ]),
+      legal_json: JSON.stringify({ impressum: { exists: true, url: 'https://example.com/impressum' }, privacy: { exists: true, url: 'https://example.com/datenschutz' } }),
+      cookie_json: JSON.stringify({ detected: false, score: 0 }),
+      discrepancies_json: JSON.stringify([{ field: 'Registered Address', dbField: 'registered_address', dbValue: 'Maximilianstra\u00dfe 35a, 80539 M\u00fcnchen', websiteValue: 'Maximilianstr. 35a, 80539 M\u00fcnchen, Deutschland', severity: 'critical' }]),
+      scan_data_json: '{}',
+      completed_at: new Date().toISOString()
+    });
+    res.json({ success: true, companyId: company.id });
+  } catch (err) {
+    console.error('Seed demo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Serve frontend ---
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));

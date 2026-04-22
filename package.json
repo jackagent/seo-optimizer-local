@@ -1,0 +1,17 @@
+{
+  "name": "seo-optimizer-local",
+  "version": "1.0.0",
+  "description": "Self-contained SEO & Compliance Optimizer — runs locally on Mac Mini with SQLite",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "setup": "node server/setup-db.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "puppeteer": "^23.0.0",
+    "cheerio": "^1.0.0"
+  }
+}

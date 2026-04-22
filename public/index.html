@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEO & Compliance Optimizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand" onclick="navigate('home')">
+          <div class="sidebar-icon">&#x1F50D;</div>
+          <span class="sidebar-title">SEO Optimizer</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="home" onclick="navigate('home')">
+          <span class="icon">&#x1F3E0;</span> Home
+        </button>
+        <button class="nav-item" data-page="dashboard" onclick="navigate('dashboard')">
+          <span class="icon">&#x1F4CA;</span> Dashboard
+        </button>
+        <button class="nav-item" data-page="companies" onclick="navigate('companies')">
+          <span class="icon">&#x1F3E2;</span> Companies
+        </button>
+        <button class="nav-item" data-page="scan-all" onclick="scanAll()">
+          <span class="icon">&#x1F504;</span> Scan All
+        </button>
+      </nav>
+      <div class="sidebar-footer">SEO & Compliance Optimizer v1.0<br>Local Edition</div>
+    </aside>
+    <main class="main" id="app">
+      <div class="spinner"></div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

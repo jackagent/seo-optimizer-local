@@ -1,6 +1,6 @@
 {
   "name": "seo-optimizer-local",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Sentinel — Enterprise SEO & Compliance Intelligence Platform with YouTube SEO Analyzer, AI Article Generator, and Social Media Outreach Bot. Runs locally with SQLite.",
   "main": "server/index.js",
   "scripts": {

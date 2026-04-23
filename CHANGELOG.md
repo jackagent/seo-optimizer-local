@@ -4,6 +4,34 @@ All notable changes to Sentinel are documented in this file.
 
 ---
 
+## [3.1.0] — 2026-04-23
+
+### Added
+
+- **Multi-Provider AI Integration** — Pre-configured support for Kimi (Moonshot AI) and OpenAI. One-click provider switching in Settings with auto-filled URLs and model dropdowns.
+
+- **Kimi (Moonshot AI)** as recommended text provider — Free tier available at platform.kimi.ai. Models: kimi-k2.5, moonshot-v1-128k, moonshot-v1-32k, moonshot-v1-8k.
+
+- **OpenAI** with DALL-E image generation — GPT models for text, DALL-E 3 for article hero images. Models: gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo.
+
+- **Custom provider support** — Any OpenAI-compatible endpoint (Ollama, LM Studio, Azure, Groq, Together AI, etc.)
+
+- **Provider-aware Settings UI** — Three provider buttons with auto-fill, model dropdown with provider-specific options, custom model input, provider hints with signup links.
+
+- **Separate image generation config** — Use one provider for text (e.g., Kimi) and another for images (e.g., OpenAI DALL-E). Image API key falls back to text API key if not set.
+
+- **Connection test with provider info** — Test button now shows provider name and model in success message.
+
+- **New API endpoint** — `GET /api/providers` returns all available provider presets with models, URLs, and capabilities.
+
+### Changed
+
+- Settings API now masks API keys (shows first 8 + last 4 chars) instead of full masking
+- Settings PUT endpoint skips masked API key values to prevent overwriting with masked strings
+- LLM module refactored with provider presets, auto-detection, and separate image generation config
+
+---
+
 ## [3.0.0] — 2026-04-23
 
 ### Added

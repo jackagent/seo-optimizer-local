@@ -210,22 +210,40 @@ Navigate to **YouTube SEO** in the sidebar. Enter a YouTube URL and optionally s
 
 ### Step 5: Generate Articles
 
-Navigate to **Article Generator**. You need to configure your OpenAI API key in **Settings** first. Then enter a topic, select tone and language, and click **Generate Article**. The article is created with an AI-generated hero image.
+Navigate to **Article Generator**. You need to configure your AI provider (Kimi or OpenAI) in **Settings** first. Then enter a topic, select tone and language, and click **Generate Article**. The article is created with an AI-generated hero image.
 
 ### Step 6: Create Outreach Campaigns
 
-Navigate to **Outreach Bot**. Configure your API key in **Settings** first. Select a platform, enter your target audience and campaign goal, then click **Generate Campaign**. You get a primary message, follow-ups, and hooks.
+Navigate to **Outreach Bot**. Configure your AI provider in **Settings** first. Select a platform, enter your target audience and campaign goal, then click **Generate Campaign**. You get a primary message, follow-ups, and hooks.
 
 ### Step 7: Configure AI Settings
 
-Navigate to **Settings** (gear icon in sidebar). Enter your OpenAI-compatible API credentials:
+Navigate to **Settings** in the sidebar. Sentinel supports multiple AI providers out of the box:
+
+#### Pre-configured Providers
+
+| Provider | Best For | API URL | Signup |
+|---|---|---|---|
+| **Kimi (Moonshot AI)** | Text generation (articles, outreach). Free tier available. | `https://api.moonshot.ai/v1` | [platform.kimi.ai](https://platform.kimi.ai) |
+| **OpenAI** | Text generation + DALL-E image generation | `https://api.openai.com/v1` | [platform.openai.com](https://platform.openai.com) |
+| **Custom** | Any OpenAI-compatible endpoint (Ollama, LM Studio, Azure, Groq, etc.) | Your endpoint URL | N/A |
+
+#### Recommended Setup for Mac Mini
+
+1. **Text generation:** Use **Kimi** (free tier, excellent quality, 128K context window)
+2. **Image generation:** Use **OpenAI** (DALL-E 3 for article hero images)
+
+You can mix providers — e.g., Kimi for text and OpenAI for images. Just enter the respective API keys in the Settings page.
+
+#### Settings Reference
 
 | Setting | Description | Default |
 |---|---|---|
-| **API Key** | Your OpenAI or compatible API key | Required for Article Generator and Outreach Bot |
-| **API URL** | Base URL of the API | `https://api.openai.com/v1` |
-| **Model** | Model to use for text generation | `gpt-4o-mini` |
-| **Image API Key** | API key for image generation | Same as API Key if not set |
+| **Provider** | Select Kimi, OpenAI, or Custom | Kimi |
+| **API Key** | Your provider's API key | Required for Article Generator and Outreach Bot |
+| **API URL** | Auto-filled based on provider selection | `https://api.moonshot.ai/v1` |
+| **Model** | Model dropdown with provider-specific options | `moonshot-v1-8k` (Kimi) / `gpt-4o-mini` (OpenAI) |
+| **Image API Key** | Separate key for DALL-E image generation | Falls back to text API key |
 | **Image API URL** | Base URL for image generation | `https://api.openai.com/v1` |
 
 Use the **Test Connection** button to verify your API key works before generating content.
@@ -334,8 +352,9 @@ DELETE /api/outreach/:id          → Delete a campaign
 
 ```
 GET    /api/settings               → Get all settings (API keys are masked)
-PUT    /api/settings               → Update settings. Body: {"llm_api_key", "llm_base_url", "llm_model", "image_api_key", "image_base_url"}
+PUT    /api/settings               → Update settings. Body: {"llm_provider", "llm_api_key", "llm_base_url", "llm_model", "image_api_key", "image_base_url"}
 POST   /api/settings/test-llm     → Test LLM connection with current settings
+GET    /api/providers              → Get all available AI provider presets (Kimi, OpenAI, Custom) with models and capabilities
 ```
 
 ### Utility Endpoints
@@ -587,7 +606,7 @@ npm run reset
 
 ### Article Generator or Outreach Bot shows "API Key Required"
 
-Navigate to **Settings** in the sidebar and enter your OpenAI API key. Use the **Test Connection** button to verify it works. Any OpenAI-compatible API works (OpenAI, Azure OpenAI, Anthropic via proxy, local LLMs with OpenAI-compatible endpoints like Ollama, LM Studio, etc.).
+Navigate to **Settings** in the sidebar, select your provider (Kimi or OpenAI), and enter your API key. Use the **Test Connection** button to verify it works. Recommended: Use **Kimi** (free tier at platform.kimi.ai) for text generation and **OpenAI** for image generation. Any OpenAI-compatible API also works (Ollama, LM Studio, Azure, Groq, etc.).
 
 ### Server crashes during scan
 

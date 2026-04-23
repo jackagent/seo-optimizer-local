@@ -1374,6 +1374,17 @@ async function renderSettings() {
   const app = document.getElementById('main-body');
   app.innerHTML = '<div class="spinner"></div>';
   const settings = await api('/api/settings') || {};
+  const currentProvider = settings.llm_provider || settings._provider || 'kimi';
+
+  const providerPresets = {
+    kimi: { url: 'https://api.moonshot.ai/v1', model: 'moonshot-v1-8k', models: ['kimi-k2.5','moonshot-v1-128k','moonshot-v1-32k','moonshot-v1-8k'] },
+    openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', models: ['gpt-4o-mini','gpt-4o','gpt-4-turbo','gpt-3.5-turbo'] },
+    custom: { url: '', model: '', models: [] }
+  };
+
+  const preset = providerPresets[currentProvider] || providerPresets.kimi;
+  const currentUrl = settings.llm_base_url || preset.url;
+  const currentModel = settings.llm_model || preset.model;
 
   let html = `
     <div class="feature-header" style="margin-bottom:24px">
@@ -1383,6 +1394,31 @@ async function renderSettings() {
       </div>
     </div>
 
+    <!-- Provider Selection -->
+    <div class="info-card" style="margin-bottom:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">${t('set.providerSection')}</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${t('set.providerDesc')}</p>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+        <button class="btn provider-btn ${currentProvider === 'kimi' ? 'btn-primary' : ''}" data-provider="kimi" onclick="selectProvider('kimi')" style="padding:12px 8px;font-size:12px;text-align:center;line-height:1.4">
+          <div style="font-weight:700;margin-bottom:2px">Kimi</div>
+          <div style="font-size:10px;opacity:0.8">Moonshot AI</div>
+        </button>
+        <button class="btn provider-btn ${currentProvider === 'openai' ? 'btn-primary' : ''}" data-provider="openai" onclick="selectProvider('openai')" style="padding:12px 8px;font-size:12px;text-align:center;line-height:1.4">
+          <div style="font-weight:700;margin-bottom:2px">OpenAI</div>
+          <div style="font-size:10px;opacity:0.8">GPT + DALL-E</div>
+        </button>
+        <button class="btn provider-btn ${currentProvider === 'custom' ? 'btn-primary' : ''}" data-provider="custom" onclick="selectProvider('custom')" style="padding:12px 8px;font-size:12px;text-align:center;line-height:1.4">
+          <div style="font-weight:700;margin-bottom:2px">Custom</div>
+          <div style="font-size:10px;opacity:0.8">OpenAI-kompatibel</div>
+        </button>
+      </div>
+      <div id="provider-hint" style="font-size:11px;color:var(--text-muted);padding:8px 12px;background:rgba(99,102,241,0.08);border-radius:8px">
+        ${t('set.providerHint.' + currentProvider)}
+      </div>
+    </div>
+
+    <!-- Text AI Config -->
     <div class="info-card" style="margin-bottom:20px">
       <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">${t('set.llmSection')}</h3>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${t('set.llmDesc')}</p>
@@ -1394,20 +1430,25 @@ async function renderSettings() {
         </div>
         <div class="form-group">
           <label class="form-label">${t('set.apiUrl')}</label>
-          <input class="form-input" id="set-api-url" value="${escapeHtml(settings.llm_base_url || 'https://api.openai.com/v1')}" placeholder="${t('set.apiUrlPlaceholder')}">
+          <input class="form-input" id="set-api-url" value="${escapeHtml(currentUrl)}" placeholder="${t('set.apiUrlPlaceholder')}">
         </div>
         <div class="form-group">
           <label class="form-label">${t('set.apiModel')}</label>
-          <input class="form-input" id="set-api-model" value="${escapeHtml(settings.llm_model || 'gpt-4o-mini')}" placeholder="${t('set.apiModelPlaceholder')}">
+          <select class="form-input" id="set-api-model">
+            ${preset.models.map(m => `<option value="${m}" ${m === currentModel ? 'selected' : ''}>${m}</option>`).join('')}
+            <option value="_custom" ${!preset.models.includes(currentModel) && currentModel ? 'selected' : ''}>Benutzerdefiniert...</option>
+          </select>
+          <input class="form-input" id="set-api-model-custom" value="${escapeHtml(!preset.models.includes(currentModel) ? currentModel : '')}" placeholder="Modellname eingeben..." style="margin-top:6px;display:${!preset.models.includes(currentModel) && currentModel ? 'block' : 'none'}">
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
         <span style="font-size:12px;color:var(--text-muted)">${t('set.status')}:</span>
-        <span style="font-size:12px;font-weight:700;color:${settings.llm_api_key ? 'var(--green)' : 'var(--red)'}">${settings.llm_api_key ? '\u2713 ' + t('set.configured') : '\u2717 ' + t('set.notConfigured')}</span>
+        <span style="font-size:12px;font-weight:700;color:${settings._isConfigured ? 'var(--green)' : 'var(--red)'}">${settings._isConfigured ? '\u2713 ' + t('set.configured') : '\u2717 ' + t('set.notConfigured')}</span>
       </div>
     </div>
 
+    <!-- Image Generation Config -->
     <div class="info-card" style="margin-bottom:20px">
       <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">${t('set.imageSection')}</h3>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${t('set.imageDesc')}</p>
@@ -1416,11 +1457,18 @@ async function renderSettings() {
         <div class="form-group">
           <label class="form-label">${t('set.imageApiKey')}</label>
           <input class="form-input" id="set-img-key" type="password" value="${escapeHtml(settings.image_api_key || '')}" placeholder="${t('set.imageApiKeyPlaceholder')}">
+          <span style="font-size:10px;color:var(--text-muted);margin-top:2px;display:block">Leer lassen = Text-API-Key wird verwendet</span>
         </div>
         <div class="form-group">
           <label class="form-label">${t('set.imageApiUrl')}</label>
           <input class="form-input" id="set-img-url" value="${escapeHtml(settings.image_base_url || 'https://api.openai.com/v1')}" placeholder="${t('set.imageApiUrlPlaceholder')}">
+          <span style="font-size:10px;color:var(--text-muted);margin-top:2px;display:block">DALL-E ben\u00f6tigt OpenAI URL</span>
         </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <span style="font-size:12px;color:var(--text-muted)">${t('set.status')}:</span>
+        <span style="font-size:12px;font-weight:700;color:${settings._isImageConfigured ? 'var(--green)' : 'var(--text-muted)'}">${settings._isImageConfigured ? '\u2713 ' + t('set.configured') : '\u2014 Optional'}</span>
       </div>
     </div>
 
@@ -1430,6 +1478,44 @@ async function renderSettings() {
     </div>`;
 
   app.innerHTML = html;
+
+  // Model dropdown toggle for custom input
+  const modelSelect = document.getElementById('set-api-model');
+  const modelCustom = document.getElementById('set-api-model-custom');
+  if (modelSelect) {
+    modelSelect.addEventListener('change', () => {
+      modelCustom.style.display = modelSelect.value === '_custom' ? 'block' : 'none';
+    });
+  }
+}
+
+function selectProvider(provider) {
+  const presets = {
+    kimi: { url: 'https://api.moonshot.ai/v1', model: 'moonshot-v1-8k', models: ['kimi-k2.5','moonshot-v1-128k','moonshot-v1-32k','moonshot-v1-8k'] },
+    openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', models: ['gpt-4o-mini','gpt-4o','gpt-4-turbo','gpt-3.5-turbo'] },
+    custom: { url: '', model: '', models: [] }
+  };
+  const preset = presets[provider];
+
+  // Update button styles
+  document.querySelectorAll('.provider-btn').forEach(btn => {
+    btn.classList.toggle('btn-primary', btn.dataset.provider === provider);
+  });
+
+  // Update hint
+  document.getElementById('provider-hint').textContent = t('set.providerHint.' + provider);
+
+  // Auto-fill URL and model
+  document.getElementById('set-api-url').value = preset.url;
+  const modelSelect = document.getElementById('set-api-model');
+  modelSelect.innerHTML = preset.models.map(m => `<option value="${m}">${m}</option>`).join('') + '<option value="_custom">Benutzerdefiniert...</option>';
+  if (preset.model) modelSelect.value = preset.model;
+
+  // Hide custom model input
+  document.getElementById('set-api-model-custom').style.display = 'none';
+
+  // Store provider choice
+  window._selectedProvider = provider;
 }
 
 async function saveSettings() {
@@ -1437,12 +1523,18 @@ async function saveSettings() {
   btn.textContent = t('set.saving');
   btn.disabled = true;
 
+  const modelSelect = document.getElementById('set-api-model');
+  const modelValue = modelSelect.value === '_custom'
+    ? document.getElementById('set-api-model-custom').value
+    : modelSelect.value;
+
   await api('/api/settings', {
     method: 'PUT',
     body: JSON.stringify({
+      llm_provider: window._selectedProvider || document.querySelector('.provider-btn.btn-primary')?.dataset?.provider || 'kimi',
       llm_api_key: document.getElementById('set-api-key').value,
       llm_base_url: document.getElementById('set-api-url').value,
-      llm_model: document.getElementById('set-api-model').value,
+      llm_model: modelValue,
       image_api_key: document.getElementById('set-img-key').value,
       image_base_url: document.getElementById('set-img-url').value
     })
@@ -1466,9 +1558,9 @@ async function testLLM() {
   btn.disabled = false;
 
   if (result && result.success) {
-    showToast(t('toast.llmTestSuccess'));
+    showToast(`\u2713 ${result.providerName || 'LLM'}: ${result.response || 'OK'}`);
   } else {
-    showToast(t('toast.llmTestFailed'), 'error');
+    showToast(t('toast.llmTestFailed') + (result?.error ? ': ' + result.error : ''), 'error');
   }
 }
 

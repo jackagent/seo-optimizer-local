@@ -610,14 +610,25 @@ app.delete('/api/outreach/:id', (req, res) => {
 app.get('/api/settings', (req, res) => {
   try {
     const settings = db.getAllSettings();
-    // Mask API key for security
     const result = {};
     for (const s of settings) {
-      result[s.key] = s.key.includes('api_key') ? (s.value ? '***configured***' : '') : s.value;
+      // Mask API keys but keep first 8 chars for identification
+      if (s.key.includes('api_key') && s.value) {
+        result[s.key] = s.value.substring(0, 8) + '...' + s.value.substring(s.value.length - 4);
+      } else {
+        result[s.key] = s.value;
+      }
     }
     result._isConfigured = llm.isConfigured();
+    result._isImageConfigured = llm.isImageConfigured();
+    result._provider = llm.getConfig().provider;
     res.json(result);
   } catch (err) { res.status(500).json({ error: 'Failed to load settings' }); }
+});
+
+// Get available providers
+app.get('/api/providers', (req, res) => {
+  res.json(llm.getProviders());
 });
 
 app.put('/api/settings', (req, res) => {
@@ -630,6 +641,8 @@ app.put('/api/settings', (req, res) => {
       // Bulk update: treat all keys as settings
       for (const [key, value] of Object.entries(body)) {
         if (key.startsWith('_')) continue;
+        // Don't overwrite API keys with masked values
+        if (key.includes('api_key') && value && value.includes('...')) continue;
         db.setSetting(key, value || '');
       }
     }
@@ -651,13 +664,12 @@ app.post('/api/settings/bulk', (req, res) => {
 
 app.post('/api/settings/test-llm', async (req, res) => {
   try {
-    if (!llm.isConfigured()) {
-      return res.status(400).json({ error: 'API key not configured', success: false });
+    const result = await llm.testConnection();
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
     }
-    const response = await llm.chatCompletion([
-      { role: 'user', content: 'Say "Connection successful" in exactly those words.' }
-    ], { max_tokens: 20 });
-    res.json({ success: true, response: response.trim() });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }

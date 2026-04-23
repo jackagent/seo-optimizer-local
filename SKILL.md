@@ -1,7 +1,7 @@
 ---
 name: sentinel-seo-compliance
 description: Enterprise SEO & Compliance Intelligence Platform with YouTube SEO Analyzer, AI Article Generator (with auto image generation), and Social Media Outreach Bot. Scan company websites for SEO scores, legal compliance (Impressum, Datenschutz, AGB, Cookie-Banner), detect discrepancies, auto-learn company details, generate fix prompts, analyze YouTube videos, create SEO articles with AI images, and generate outreach campaigns for LinkedIn, Twitter/X, Instagram, Facebook, and Email. Full bilingual DE/EN interface. Use when managing a portfolio of company websites, checking legal compliance, monitoring SEO health, creating content, or automating social media outreach.
-version: 3.0.0
+version: 3.1.0
 author: EX Venture
 tags:
   - seo
@@ -35,7 +35,10 @@ Enterprise-grade portfolio monitoring dashboard with YouTube SEO analysis, AI ar
 - **npm** (comes with Node.js)
 - Works on **macOS** (Mac Mini M1/M2/M4, MacBook), **Linux**, and **Windows**
 - Puppeteer auto-downloads Chromium (~170 MB) on first `npm install`
-- **Optional:** OpenAI-compatible API key for Article Generator and Outreach Bot
+- **Optional:** API key for Article Generator and Outreach Bot. Pre-configured providers:
+  - **Kimi (Moonshot AI)** — Free tier at platform.kimi.ai (recommended for text)
+  - **OpenAI** — platform.openai.com (recommended for text + DALL-E images)
+  - **Custom** — Any OpenAI-compatible endpoint (Ollama, LM Studio, Azure, Groq, etc.)
 
 ### macOS / Mac Mini Notes
 

@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const cheerio = require('cheerio');
+const os = require('os');
 
 const LEGAL_KEYWORDS = {
   impressum: ['impressum', 'imprint', 'legal notice', 'legal-notice', 'site notice'],
@@ -8,13 +9,39 @@ const LEGAL_KEYWORDS = {
   cookie: ['cookie', 'cookies', 'cookie-policy']
 };
 
+/**
+ * Get Puppeteer launch options optimized for the current platform.
+ * Works on macOS (Mac Mini), Linux, and Windows.
+ */
+function getLaunchOptions() {
+  const platform = os.platform();
+  const opts = {
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--no-first-run'
+    ]
+  };
+
+  // On macOS, Puppeteer downloads its own Chromium — no extra config needed.
+  // On Linux without a display, ensure headless mode works.
+  if (platform === 'linux' && !process.env.DISPLAY) {
+    opts.args.push('--disable-software-rasterizer');
+  }
+
+  return opts;
+}
+
 async function scanWebsite(url) {
   let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    });
+    browser = await puppeteer.launch(getLaunchOptions());
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) SEOOptimizer/1.0');

@@ -4,6 +4,32 @@ All notable changes to Sentinel are documented in this file.
 
 ---
 
+## [2.1.0] — 2026-04-22
+
+### Fixed
+
+- **CRITICAL:** Server no longer crashes during website scans (SQL quoting bug in createScan)
+- **CRITICAL:** Global error handler prevents any unhandled exception from killing the server
+- Improved API error responses with proper try/catch on every endpoint
+- Fixed Content-Type header handling for multipart form uploads (document upload)
+
+### Added
+
+- Cross-platform Puppeteer launch configuration (macOS Mac Mini M1/M2/M4, Linux, Windows)
+- macOS Gatekeeper troubleshooting in README and SKILL.md
+- Cross-platform `npm run reset` script (no longer requires Unix `rm -rf`)
+- `npm run dev` alias for `npm start`
+- `process.on('unhandledRejection')` and `process.on('uncaughtException')` handlers
+- Scan failures are now gracefully recorded as `status: 'failed'` instead of crashing
+
+### Improved
+
+- README with Mac Mini specific setup instructions
+- SKILL.md with troubleshooting section and macOS notes
+- Better console logging with `[Scan]`, `[Auto-Learn]`, `[API Error]` prefixes
+
+---
+
 ## [2.0.0] — 2026-04-22
 
 ### Added

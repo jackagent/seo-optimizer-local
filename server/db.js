@@ -29,9 +29,17 @@ module.exports = {
     return { id: result.lastInsertRowid, name, url };
   },
 
-  updateCompany(id, { name, url, description, sector, hosting_platform }) {
-    db.prepare('UPDATE companies SET name=?, url=?, description=?, sector=?, hosting_platform=?, updated_at=datetime("now") WHERE id=?')
-      .run(name, url, description || null, sector || null, hosting_platform || null, id);
+  updateCompany(id, data) {
+    // Only update fields that are actually provided (not undefined)
+    const allowed = ['name', 'url', 'description', 'sector', 'hosting_platform', 'is_active', 'is_parked_domain'];
+    const updates = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updates[key] = data[key];
+    }
+    if (Object.keys(updates).length === 0) return;
+    const fields = Object.keys(updates).map(k => `${k}=@${k}`).join(', ');
+    db.prepare(`UPDATE companies SET ${fields}, updated_at=datetime('now') WHERE id=@id`)
+      .run({ ...updates, id });
   },
 
   deleteCompany(id) {
@@ -76,7 +84,7 @@ module.exports = {
   },
 
   createScan(companyId) {
-    const result = db.prepare('INSERT INTO scans (company_id, status) VALUES (?, "running")').run(companyId);
+    const result = db.prepare("INSERT INTO scans (company_id, status) VALUES (?, 'running')").run(companyId);
     return result.lastInsertRowid;
   },
 

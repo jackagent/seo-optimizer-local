@@ -30,13 +30,21 @@ Everything runs locally on your machine. No cloud. No subscription. No data leav
 
 ### Prerequisites
 
-You need **Node.js 18 or higher** installed on your machine. Download it from [nodejs.org](https://nodejs.org) if you do not have it yet. Sentinel runs on macOS, Linux, and Windows.
+You need **Node.js 18 or higher** installed on your machine. Sentinel runs on **macOS** (Mac Mini M1/M2/M4, MacBook), **Linux**, and **Windows**.
 
 Verify your Node.js version:
 
 ```bash
 node --version
 # Should output v18.x.x or higher
+```
+
+**Mac Mini Setup:** If you do not have Node.js installed yet, the fastest way on macOS is:
+
+```bash
+# Option A: Download from nodejs.org
+# Option B: Install via Homebrew
+brew install node
 ```
 
 ### Installation
@@ -46,7 +54,7 @@ node --version
 git clone https://github.com/jackagent/seo-optimizer-local.git
 cd seo-optimizer-local
 
-# 2. Install dependencies
+# 2. Install dependencies (downloads Chromium ~170 MB on first run)
 npm install
 
 # 3. Initialize the database
@@ -60,6 +68,8 @@ npm start
 ```
 
 Open **http://localhost:3000** in your browser. You will see the dashboard with two pre-loaded demo companies ready to explore.
+
+> **Mac Mini Note:** On macOS, if you see a Gatekeeper warning about Chromium on first scan, run: `xattr -cr node_modules/puppeteer/.local-chromium`
 
 ### What Happens During Installation
 
@@ -445,6 +455,14 @@ Puppeteer needs to download Chromium on first install. If this fails (e.g., behi
 npx puppeteer browsers install chrome
 ```
 
+### macOS Gatekeeper blocks Chromium
+
+On Mac Mini or MacBook, macOS may block the bundled Chromium. Fix with:
+
+```bash
+xattr -cr node_modules/puppeteer/.local-chromium
+```
+
 ### "EACCES: permission denied" on Linux
 
 If you get permission errors, avoid running with `sudo`. Instead, fix npm permissions:
@@ -478,6 +496,16 @@ npm run reset
 ### Scans are slow
 
 Scans run sequentially to avoid overwhelming your machine. Each scan takes 15-30 seconds depending on website complexity and your internet connection. Portfolio scans process companies one at a time.
+
+### Server crashes during scan
+
+This was fixed in v2.1.0. The server now includes global error handling and will never crash from a failed scan. If you are running an older version, update to the latest:
+
+```bash
+git pull origin master
+npm install
+npm start
+```
 
 ### Language does not switch
 

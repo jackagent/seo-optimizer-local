@@ -105,14 +105,19 @@ function navigate(page, data) {
 // ==================== API Helpers ====================
 async function api(url, opts = {}) {
   try {
-    const res = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...opts.headers },
-      ...opts
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const fetchOpts = { ...opts };
+    // Only set Content-Type for JSON requests (not FormData)
+    if (!opts.body || typeof opts.body === 'string') {
+      fetchOpts.headers = { 'Content-Type': 'application/json', ...opts.headers };
+    }
+    const res = await fetch(url, fetchOpts);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}: ${errBody}`);
+    }
     return res.json();
   } catch (err) {
-    console.error('API Error:', err);
+    console.error('API Error:', url, err);
     showToast(t('toast.connectionError'), 'error');
     return null;
   }

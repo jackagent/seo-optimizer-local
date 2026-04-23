@@ -36,276 +36,398 @@ const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 // --- Dashboard ---
 app.get('/api/dashboard/stats', (req, res) => {
-  res.json(db.getDashboardStats());
+  try {
+    res.json(db.getDashboardStats());
+  } catch (err) {
+    console.error('[API Error] /api/dashboard/stats:', err.message);
+    res.status(500).json({ error: 'Failed to load stats' });
+  }
 });
 
 app.get('/api/dashboard/companies', (req, res) => {
-  const companies = db.getAllCompanies();
-  const result = companies.map(c => {
-    const scan = db.getLatestScan(c.id);
-    return { ...c, latestScan: scan || null };
-  });
-  res.json(result);
+  try {
+    const companies = db.getAllCompanies();
+    const result = companies.map(c => {
+      const scan = db.getLatestScan(c.id);
+      return { ...c, latestScan: scan || null };
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[API Error] /api/dashboard/companies:', err.message);
+    res.status(500).json({ error: 'Failed to load companies' });
+  }
 });
 
 app.get('/api/dashboard/discrepancies', (req, res) => {
-  res.json(db.getAllDiscrepancies());
+  try {
+    res.json(db.getAllDiscrepancies());
+  } catch (err) {
+    console.error('[API Error] /api/dashboard/discrepancies:', err.message);
+    res.status(500).json({ error: 'Failed to load discrepancies' });
+  }
 });
 
 // --- Companies ---
 app.get('/api/companies', (req, res) => {
-  res.json(db.getAllCompanies());
+  try {
+    res.json(db.getAllCompanies());
+  } catch (err) {
+    console.error('[API Error] GET /api/companies:', err.message);
+    res.status(500).json({ error: 'Failed to load companies' });
+  }
 });
 
 app.get('/api/companies/:id', (req, res) => {
-  const company = db.getCompanyById(req.params.id);
-  if (!company) return res.status(404).json({ error: 'Company not found' });
+  try {
+    const company = db.getCompanyById(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
 
-  const details = db.getCompanyDetails(company.id);
-  const latestScan = db.getLatestScan(company.id);
-  const scanHistory = db.getScanHistory(company.id);
-  const documents = db.getDocuments(company.id);
+    const details = db.getCompanyDetails(company.id);
+    const latestScan = db.getLatestScan(company.id);
+    const scanHistory = db.getScanHistory(company.id);
+    const documents = db.getDocuments(company.id);
 
-  res.json({ ...company, details, latestScan, scanHistory, documents });
+    res.json({ ...company, details, latestScan, scanHistory, documents });
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id:', err.message);
+    res.status(500).json({ error: 'Failed to load company' });
+  }
 });
 
 app.post('/api/companies', (req, res) => {
-  const { name, url, description, sector, hosting_platform } = req.body;
-  if (!name || !url) return res.status(400).json({ error: 'Name and URL are required' });
-  const company = db.createCompany({ name, url, description, sector, hosting_platform });
-  res.json(company);
+  try {
+    const { name, url, description, sector, hosting_platform } = req.body;
+    if (!name || !url) return res.status(400).json({ error: 'Name and URL are required' });
+    const company = db.createCompany({ name, url, description, sector, hosting_platform });
+    res.json(company);
+  } catch (err) {
+    console.error('[API Error] POST /api/companies:', err.message);
+    res.status(500).json({ error: 'Failed to create company' });
+  }
 });
 
 app.put('/api/companies/:id', (req, res) => {
-  const { name, url, description, sector, hosting_platform } = req.body;
-  db.updateCompany(req.params.id, { name, url, description, sector, hosting_platform });
-  res.json({ success: true });
+  try {
+    db.updateCompany(parseInt(req.params.id), req.body);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API Error] PUT /api/companies/:id:', err.message);
+    res.status(500).json({ error: 'Failed to update company' });
+  }
 });
 
 app.delete('/api/companies/:id', (req, res) => {
-  db.deleteCompany(req.params.id);
-  res.json({ success: true });
+  try {
+    db.deleteCompany(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API Error] DELETE /api/companies/:id:', err.message);
+    res.status(500).json({ error: 'Failed to delete company' });
+  }
 });
 
 // --- Company Details ---
 app.get('/api/companies/:id/details', (req, res) => {
-  const details = db.getCompanyDetails(req.params.id);
-  res.json(details || {});
+  try {
+    const details = db.getCompanyDetails(req.params.id);
+    res.json(details || {});
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id/details:', err.message);
+    res.status(500).json({ error: 'Failed to load details' });
+  }
 });
 
 app.put('/api/companies/:id/details', (req, res) => {
-  db.upsertCompanyDetails(parseInt(req.params.id), req.body);
-  res.json({ success: true });
+  try {
+    db.upsertCompanyDetails(parseInt(req.params.id), req.body);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API Error] PUT /api/companies/:id/details:', err.message);
+    res.status(500).json({ error: 'Failed to update details' });
+  }
 });
 
 // --- Scanning ---
 app.post('/api/companies/:id/scan', async (req, res) => {
   const companyId = parseInt(req.params.id);
-  const company = db.getCompanyById(companyId);
-  if (!company) return res.status(404).json({ error: 'Company not found' });
-
-  const scanId = db.createScan(companyId);
-  res.json({ scanId, status: 'running', message: 'Scan started' });
-
-  // Run scan in background
   try {
-    const result = await scanWebsite(company.url);
+    const company = db.getCompanyById(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
 
-    if (result.status === 'failed') {
-      db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
-      return;
-    }
+    const scanId = db.createScan(companyId);
+    res.json({ scanId, status: 'running', message: 'Scan started' });
 
-    // Update hosting platform if detected
-    if (result.hostingPlatform && result.hostingPlatform !== 'custom') {
-      db.updateCompany(companyId, { ...company, hosting_platform: result.hostingPlatform });
-    }
+    // Run scan in background — wrapped in try/catch so server never crashes
+    (async () => {
+      try {
+        const result = await scanWebsite(company.url);
 
-    // Discrepancy detection
-    const dbDetails = db.getCompanyDetails(companyId);
-    const { discrepancies, autoLearn } = detectDiscrepancies(dbDetails, result.impressumData);
+        if (result.status === 'failed') {
+          db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
+          console.log(`[Scan Failed] ${company.name} (${company.url}): ${result.error || 'Unknown error'}`);
+          return;
+        }
 
-    // Auto-learn: populate empty fields from Impressum
-    if (autoLearn && Object.keys(autoLearn).length > 0) {
-      db.upsertCompanyDetails(companyId, autoLearn);
-      console.log(`[Auto-Learn] Company ${companyId}: populated ${Object.keys(autoLearn).join(', ')}`);
-    }
+        // Update hosting platform if detected
+        if (result.hostingPlatform && result.hostingPlatform !== 'custom') {
+          try {
+            db.updateCompany(companyId, { hosting_platform: result.hostingPlatform });
+          } catch (e) {
+            console.error(`[Scan] Failed to update hosting platform for ${company.name}:`, e.message);
+          }
+        }
 
-    db.updateScan(scanId, {
-      status: 'completed',
-      overall_score: result.overallScore,
-      meta_score: result.metaScore,
-      content_score: result.contentScore,
-      technical_score: result.technicalScore,
-      legal_score: result.legalScore,
-      has_impressum: result.hasImpressum ? 1 : 0,
-      has_privacy_policy: result.hasPrivacyPolicy ? 1 : 0,
-      has_terms_of_service: result.hasTermsOfService ? 1 : 0,
-      impressum_completeness: result.impressumCompleteness,
-      pages_crawled: result.pagesCrawled,
-      issues_json: JSON.stringify(result.issues),
-      legal_json: JSON.stringify(result.legal),
-      cookie_json: JSON.stringify(result.cookie),
-      discrepancies_json: JSON.stringify(discrepancies),
-      scan_data_json: JSON.stringify(result.scanData),
-      completed_at: new Date().toISOString()
-    });
+        // Discrepancy detection
+        const dbDetails = db.getCompanyDetails(companyId);
+        const { discrepancies, autoLearn } = detectDiscrepancies(dbDetails, result.impressumData);
 
-    console.log(`[Scan Complete] ${company.name} (${company.url}): Score ${result.overallScore}, ${discrepancies.length} discrepancies`);
+        // Auto-learn: populate empty fields from Impressum
+        if (autoLearn && Object.keys(autoLearn).length > 0) {
+          try {
+            db.upsertCompanyDetails(companyId, autoLearn);
+            console.log(`[Auto-Learn] Company ${companyId}: populated ${Object.keys(autoLearn).join(', ')}`);
+          } catch (e) {
+            console.error(`[Auto-Learn] Failed for company ${companyId}:`, e.message);
+          }
+        }
+
+        db.updateScan(scanId, {
+          status: 'completed',
+          overall_score: result.overallScore,
+          meta_score: result.metaScore,
+          content_score: result.contentScore,
+          technical_score: result.technicalScore,
+          legal_score: result.legalScore,
+          has_impressum: result.hasImpressum ? 1 : 0,
+          has_privacy_policy: result.hasPrivacyPolicy ? 1 : 0,
+          has_terms_of_service: result.hasTermsOfService ? 1 : 0,
+          impressum_completeness: result.impressumCompleteness,
+          pages_crawled: result.pagesCrawled,
+          issues_json: JSON.stringify(result.issues),
+          legal_json: JSON.stringify(result.legal),
+          cookie_json: JSON.stringify(result.cookie),
+          discrepancies_json: JSON.stringify(discrepancies),
+          scan_data_json: JSON.stringify(result.scanData),
+          completed_at: new Date().toISOString()
+        });
+
+        console.log(`[Scan Complete] ${company.name} (${company.url}): Score ${result.overallScore}, ${discrepancies.length} discrepancies`);
+      } catch (err) {
+        console.error(`[Scan Error] ${company.name}:`, err.message);
+        try {
+          db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
+        } catch (e) {
+          console.error(`[Scan Error] Failed to update scan status:`, e.message);
+        }
+      }
+    })();
   } catch (err) {
-    console.error(`[Scan Error] ${company.name}:`, err.message);
-    db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
+    console.error('[API Error] POST /api/companies/:id/scan:', err.message);
+    res.status(500).json({ error: 'Failed to start scan' });
   }
 });
 
 app.post('/api/scan-all', async (req, res) => {
-  const companies = db.getAllCompanies();
-  const scanIds = companies.map(c => ({ companyId: c.id, scanId: db.createScan(c.id) }));
-  res.json({ message: `${companies.length} scans queued`, scans: scanIds });
+  try {
+    const companies = db.getAllCompanies();
+    const scanIds = [];
 
-  // Run sequentially in background
-  for (const { companyId, scanId } of scanIds) {
-    const company = db.getCompanyById(companyId);
-    try {
-      const result = await scanWebsite(company.url);
-      if (result.status === 'failed') {
-        db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
-        continue;
+    for (const c of companies) {
+      try {
+        const scanId = db.createScan(c.id);
+        scanIds.push({ companyId: c.id, scanId });
+      } catch (e) {
+        console.error(`[Scan-All] Failed to create scan for ${c.name}:`, e.message);
       }
-
-      if (result.hostingPlatform && result.hostingPlatform !== 'custom') {
-        db.updateCompany(companyId, { ...company, hosting_platform: result.hostingPlatform });
-      }
-
-      const dbDetails = db.getCompanyDetails(companyId);
-      const { discrepancies, autoLearn } = detectDiscrepancies(dbDetails, result.impressumData);
-      if (autoLearn && Object.keys(autoLearn).length > 0) {
-        db.upsertCompanyDetails(companyId, autoLearn);
-      }
-
-      db.updateScan(scanId, {
-        status: 'completed',
-        overall_score: result.overallScore,
-        meta_score: result.metaScore,
-        content_score: result.contentScore,
-        technical_score: result.technicalScore,
-        legal_score: result.legalScore,
-        has_impressum: result.hasImpressum ? 1 : 0,
-        has_privacy_policy: result.hasPrivacyPolicy ? 1 : 0,
-        has_terms_of_service: result.hasTermsOfService ? 1 : 0,
-        impressum_completeness: result.impressumCompleteness,
-        pages_crawled: result.pagesCrawled,
-        issues_json: JSON.stringify(result.issues),
-        legal_json: JSON.stringify(result.legal),
-        cookie_json: JSON.stringify(result.cookie),
-        discrepancies_json: JSON.stringify(discrepancies),
-        scan_data_json: JSON.stringify(result.scanData),
-        completed_at: new Date().toISOString()
-      });
-      console.log(`[Scan Complete] ${company.name}: Score ${result.overallScore}`);
-    } catch (err) {
-      console.error(`[Scan Error] ${company.name}:`, err.message);
-      db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
     }
+
+    res.json({ message: `${scanIds.length} scans queued`, scans: scanIds });
+
+    // Run sequentially in background
+    (async () => {
+      for (const { companyId, scanId } of scanIds) {
+        const company = db.getCompanyById(companyId);
+        try {
+          const result = await scanWebsite(company.url);
+          if (result.status === 'failed') {
+            db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
+            console.log(`[Scan-All] Failed: ${company.name}`);
+            continue;
+          }
+
+          if (result.hostingPlatform && result.hostingPlatform !== 'custom') {
+            try {
+              db.updateCompany(companyId, { hosting_platform: result.hostingPlatform });
+            } catch (e) { /* ignore */ }
+          }
+
+          const dbDetails = db.getCompanyDetails(companyId);
+          const { discrepancies, autoLearn } = detectDiscrepancies(dbDetails, result.impressumData);
+          if (autoLearn && Object.keys(autoLearn).length > 0) {
+            try { db.upsertCompanyDetails(companyId, autoLearn); } catch (e) { /* ignore */ }
+          }
+
+          db.updateScan(scanId, {
+            status: 'completed',
+            overall_score: result.overallScore,
+            meta_score: result.metaScore,
+            content_score: result.contentScore,
+            technical_score: result.technicalScore,
+            legal_score: result.legalScore,
+            has_impressum: result.hasImpressum ? 1 : 0,
+            has_privacy_policy: result.hasPrivacyPolicy ? 1 : 0,
+            has_terms_of_service: result.hasTermsOfService ? 1 : 0,
+            impressum_completeness: result.impressumCompleteness,
+            pages_crawled: result.pagesCrawled,
+            issues_json: JSON.stringify(result.issues),
+            legal_json: JSON.stringify(result.legal),
+            cookie_json: JSON.stringify(result.cookie),
+            discrepancies_json: JSON.stringify(discrepancies),
+            scan_data_json: JSON.stringify(result.scanData),
+            completed_at: new Date().toISOString()
+          });
+          console.log(`[Scan-All] Complete: ${company.name} — Score ${result.overallScore}`);
+        } catch (err) {
+          console.error(`[Scan-All Error] ${company.name}:`, err.message);
+          try {
+            db.updateScan(scanId, { status: 'failed', completed_at: new Date().toISOString() });
+          } catch (e) { /* ignore */ }
+        }
+      }
+      console.log(`[Scan-All] Finished processing ${scanIds.length} companies`);
+    })();
+  } catch (err) {
+    console.error('[API Error] POST /api/scan-all:', err.message);
+    res.status(500).json({ error: 'Failed to start scan-all' });
   }
 });
 
 // --- Scan Results ---
 app.get('/api/companies/:id/scans', (req, res) => {
-  res.json(db.getScanHistory(req.params.id));
+  try {
+    res.json(db.getScanHistory(req.params.id));
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id/scans:', err.message);
+    res.status(500).json({ error: 'Failed to load scan history' });
+  }
 });
 
 app.get('/api/companies/:id/scan/latest', (req, res) => {
-  const scan = db.getLatestScan(req.params.id);
-  if (!scan) return res.status(404).json({ error: 'No scans found' });
-  // Parse JSON fields
-  scan.issues = JSON.parse(scan.issues_json || '[]');
-  scan.legal = JSON.parse(scan.legal_json || '{}');
-  scan.cookie = JSON.parse(scan.cookie_json || '{}');
-  scan.discrepancies = JSON.parse(scan.discrepancies_json || '[]');
-  scan.scanData = JSON.parse(scan.scan_data_json || '{}');
-  res.json(scan);
+  try {
+    const scan = db.getLatestScan(req.params.id);
+    if (!scan) return res.status(404).json({ error: 'No scans found' });
+    // Parse JSON fields
+    scan.issues = JSON.parse(scan.issues_json || '[]');
+    scan.legal = JSON.parse(scan.legal_json || '{}');
+    scan.cookie = JSON.parse(scan.cookie_json || '{}');
+    scan.discrepancies = JSON.parse(scan.discrepancies_json || '[]');
+    scan.scanData = JSON.parse(scan.scan_data_json || '{}');
+    res.json(scan);
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id/scan/latest:', err.message);
+    res.status(500).json({ error: 'Failed to load latest scan' });
+  }
 });
 
 // --- Documents ---
 app.get('/api/companies/:id/documents', (req, res) => {
-  res.json(db.getDocuments(req.params.id));
+  try {
+    res.json(db.getDocuments(req.params.id));
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id/documents:', err.message);
+    res.status(500).json({ error: 'Failed to load documents' });
+  }
 });
 
 app.post('/api/companies/:companyId/documents', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  const docId = db.addDocument(parseInt(req.params.companyId), {
-    file_name: req.file.originalname,
-    file_path: req.file.path,
-    file_size: req.file.size,
-    mime_type: req.file.mimetype,
-    category: req.body.category || 'other',
-    description: req.body.description || null
-  });
-  res.json({ id: docId, fileName: req.file.originalname });
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const docId = db.addDocument(parseInt(req.params.companyId), {
+      file_name: req.file.originalname,
+      file_path: req.file.path,
+      file_size: req.file.size,
+      mime_type: req.file.mimetype,
+      category: req.body.category || 'other',
+      description: req.body.description || null
+    });
+    res.json({ id: docId, fileName: req.file.originalname });
+  } catch (err) {
+    console.error('[API Error] POST /api/companies/:companyId/documents:', err.message);
+    res.status(500).json({ error: 'Failed to upload document' });
+  }
 });
 
 app.delete('/api/documents/:id', (req, res) => {
-  db.deleteDocument(req.params.id);
-  res.json({ success: true });
+  try {
+    db.deleteDocument(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API Error] DELETE /api/documents/:id:', err.message);
+    res.status(500).json({ error: 'Failed to delete document' });
+  }
 });
 
 // --- Fix Prompt Generator ---
 app.get('/api/companies/:id/fix-prompt', (req, res) => {
-  const company = db.getCompanyById(req.params.id);
-  if (!company) return res.status(404).json({ error: 'Company not found' });
+  try {
+    const company = db.getCompanyById(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
 
-  const scan = db.getLatestScan(company.id);
-  if (!scan) return res.status(404).json({ error: 'No scan data available' });
+    const scan = db.getLatestScan(company.id);
+    if (!scan) return res.status(404).json({ error: 'No scan data available' });
 
-  const issues = JSON.parse(scan.issues_json || '[]');
-  const details = db.getCompanyDetails(company.id);
+    const issues = JSON.parse(scan.issues_json || '[]');
+    const details = db.getCompanyDetails(company.id);
 
-  let prompt = `FIX ALL ISSUES FOR: ${company.name}\n`;
-  prompt += `Website: ${company.url}\n`;
-  if (company.hosting_platform) prompt += `Platform: ${company.hosting_platform}\n`;
-  prompt += `Current SEO Score: ${scan.overall_score}/100\n\n`;
+    let prompt = `FIX ALL ISSUES FOR: ${company.name}\n`;
+    prompt += `Website: ${company.url}\n`;
+    if (company.hosting_platform) prompt += `Platform: ${company.hosting_platform}\n`;
+    prompt += `Current SEO Score: ${scan.overall_score}/100\n\n`;
 
-  if (details) {
-    prompt += `COMPANY DETAILS:\n`;
-    if (details.company_number) prompt += `- Registration: ${details.company_number}\n`;
-    if (details.registered_address) prompt += `- Address: ${details.registered_address}\n`;
-    if (details.lead_director) prompt += `- Director: ${details.lead_director}\n`;
-    if (details.vat_number) prompt += `- VAT: ${details.vat_number}\n`;
-    if (details.registered_email) prompt += `- Email: ${details.registered_email}\n`;
-    prompt += `\n`;
+    if (details) {
+      prompt += `COMPANY DETAILS:\n`;
+      if (details.company_number) prompt += `- Registration: ${details.company_number}\n`;
+      if (details.registered_address) prompt += `- Address: ${details.registered_address}\n`;
+      if (details.lead_director) prompt += `- Director: ${details.lead_director}\n`;
+      if (details.vat_number) prompt += `- VAT: ${details.vat_number}\n`;
+      if (details.registered_email) prompt += `- Email: ${details.registered_email}\n`;
+      prompt += `\n`;
+    }
+
+    prompt += `ISSUES TO FIX (${issues.length} total):\n\n`;
+
+    const critical = issues.filter(i => i.severity === 'critical');
+    const warnings = issues.filter(i => i.severity === 'warning');
+    const info = issues.filter(i => i.severity === 'info');
+
+    if (critical.length > 0) {
+      prompt += `CRITICAL (${critical.length}):\n`;
+      critical.forEach((issue, i) => {
+        prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
+      });
+    }
+
+    if (warnings.length > 0) {
+      prompt += `WARNINGS (${warnings.length}):\n`;
+      warnings.forEach((issue, i) => {
+        prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
+      });
+    }
+
+    if (info.length > 0) {
+      prompt += `INFO (${info.length}):\n`;
+      info.forEach((issue, i) => {
+        prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
+      });
+    }
+
+    prompt += `Please fix ALL of the above issues on ${company.url}. Prioritize critical issues first.`;
+
+    res.json({ prompt, issueCount: issues.length, critical: critical.length, warnings: warnings.length });
+  } catch (err) {
+    console.error('[API Error] GET /api/companies/:id/fix-prompt:', err.message);
+    res.status(500).json({ error: 'Failed to generate fix prompt' });
   }
-
-  prompt += `ISSUES TO FIX (${issues.length} total):\n\n`;
-
-  const critical = issues.filter(i => i.severity === 'critical');
-  const warnings = issues.filter(i => i.severity === 'warning');
-  const info = issues.filter(i => i.severity === 'info');
-
-  if (critical.length > 0) {
-    prompt += `CRITICAL (${critical.length}):\n`;
-    critical.forEach((issue, i) => {
-      prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
-    });
-  }
-
-  if (warnings.length > 0) {
-    prompt += `WARNINGS (${warnings.length}):\n`;
-    warnings.forEach((issue, i) => {
-      prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
-    });
-  }
-
-  if (info.length > 0) {
-    prompt += `INFO (${info.length}):\n`;
-    info.forEach((issue, i) => {
-      prompt += `${i + 1}. ${issue.title}\n   ${issue.description}\n   Fix: ${issue.fix}\n\n`;
-    });
-  }
-
-  prompt += `Please fix ALL of the above issues on ${company.url}. Prioritize critical issues first.`;
-
-  res.json({ prompt, issueCount: issues.length, critical: critical.length, warnings: warnings.length });
 });
 
 // --- Seed Demo ---
@@ -326,14 +448,14 @@ app.post('/api/seed-demo', (req, res) => {
     db.upsertCompanyDetails(company.id, {
       company_number: 'HRB 218456',
       company_type: 'GmbH',
-      jurisdiction: 'Amtsgericht M\u00fcnchen',
-      registered_address: 'Maximilianstra\u00dfe 35a, 80539 M\u00fcnchen',
+      jurisdiction: 'Amtsgericht München',
+      registered_address: 'Maximilianstraße 35a, 80539 München',
       incorporation_date: '15.03.2021',
       vat_number: 'DE345678901',
       registered_email: 'info@meridian-ventures.de',
       registered_phone: '+49 89 2180 7700',
       lead_director: 'Dr. Alexander Hartmann',
-      lead_director_title: 'Gesch\u00e4ftsf\u00fchrer'
+      lead_director_title: 'Geschäftsführer'
     });
     const scanId = db.createScan(company.id);
     db.updateScan(scanId, {
@@ -357,7 +479,7 @@ app.post('/api/seed-demo', (req, res) => {
       ]),
       legal_json: JSON.stringify({ impressum: { exists: true, url: 'https://example.com/impressum' }, privacy: { exists: true, url: 'https://example.com/datenschutz' } }),
       cookie_json: JSON.stringify({ detected: false, score: 0 }),
-      discrepancies_json: JSON.stringify([{ field: 'Registered Address', dbField: 'registered_address', dbValue: 'Maximilianstra\u00dfe 35a, 80539 M\u00fcnchen', websiteValue: 'Maximilianstr. 35a, 80539 M\u00fcnchen, Deutschland', severity: 'critical' }]),
+      discrepancies_json: JSON.stringify([{ field: 'Registered Address', dbField: 'registered_address', dbValue: 'Maximilianstraße 35a, 80539 München', websiteValue: 'Maximilianstr. 35a, 80539 München, Deutschland', severity: 'critical' }]),
       scan_data_json: '{}',
       completed_at: new Date().toISOString()
     });
@@ -368,9 +490,25 @@ app.post('/api/seed-demo', (req, res) => {
   }
 });
 
+// --- Global error handler ---
+app.use((err, req, res, next) => {
+  console.error('[Unhandled Error]', err.message);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // --- Serve frontend ---
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// --- Catch unhandled promise rejections so the server never crashes ---
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection]', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err.message);
+  // Don't exit — keep the server running
 });
 
 app.listen(PORT, () => {

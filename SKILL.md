@@ -1,7 +1,7 @@
 ---
 name: sentinel-seo-compliance
 description: Enterprise SEO & Compliance Intelligence Dashboard. Scan company websites for SEO scores, legal compliance (Impressum, Datenschutz, AGB, Cookie-Banner), detect discrepancies between stored records and live websites, auto-learn company details from Impressum pages, generate AI fix prompts, and manage company documents. Full bilingual DE/EN interface. Use when managing a portfolio of company websites, checking legal compliance under German/EU law, or monitoring SEO health across multiple entities.
-version: 2.0.0
+version: 2.1.0
 author: EX Venture
 tags:
   - seo
@@ -25,33 +25,50 @@ Enterprise-grade portfolio monitoring dashboard for website SEO health, legal co
 
 ---
 
-## Setup
+## Requirements
 
-Run these commands in order on first use:
+- **Node.js 18+** (recommended: 20 LTS or 22 LTS)
+- **npm** (comes with Node.js)
+- Works on **macOS** (Mac Mini M1/M2/M4, MacBook), **Linux**, and **Windows**
+- Puppeteer auto-downloads Chromium (~170 MB) on first `npm install`
+
+### macOS / Mac Mini Notes
+
+On macOS, Puppeteer works out of the box. No extra dependencies needed. If you see a Gatekeeper warning on first scan, run:
 
 ```bash
-cd ~/.openclaw/workspace/skills/sentinel-seo-compliance
+xattr -cr node_modules/puppeteer/.local-chromium
+```
+
+---
+
+## First-Time Setup
+
+```bash
+cd /path/to/sentinel-seo-compliance
 npm install
 npm run setup
 npm run seed
 npm start
 ```
 
-The server starts at **http://localhost:3000**. Open in browser for the full visual dashboard. Two demo companies are pre-loaded.
+The server starts at **http://localhost:3000**. Open in browser for the full visual dashboard. Two demo companies are pre-loaded with realistic German company data.
 
 To change the port: `PORT=8080 npm start`
 
 ## Starting (After First Setup)
 
 ```bash
-cd ~/.openclaw/workspace/skills/sentinel-seo-compliance && npm start
+cd /path/to/sentinel-seo-compliance && npm start
 ```
 
 ## Reset All Data
 
 ```bash
-cd ~/.openclaw/workspace/skills/sentinel-seo-compliance && npm run reset
+npm run reset
 ```
+
+This deletes the database, recreates it, and re-seeds the demo companies. Works on macOS, Linux, and Windows.
 
 ---
 
@@ -203,6 +220,45 @@ Open http://localhost:3000 in the browser for the full visual dashboard:
 
 ---
 
+## Troubleshooting
+
+### Puppeteer / Chromium Issues
+
+**macOS Gatekeeper blocks Chromium:**
+```bash
+xattr -cr node_modules/puppeteer/.local-chromium
+```
+
+**Linux missing libraries:**
+```bash
+sudo apt-get install -y libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libgtk-3-0
+```
+
+**Scan fails for a specific website:**
+Some websites block headless browsers or require JavaScript rendering that times out. The scan will be marked as "failed" — the server continues running. Check the terminal for error details.
+
+### Database Issues
+
+**"Database is locked" error:**
+Only one server instance can run at a time. Kill any existing process:
+```bash
+lsof -i :3000 | grep LISTEN
+kill <PID>
+```
+
+**Start completely fresh:**
+```bash
+npm run reset
+```
+
+### Port Already in Use
+
+```bash
+PORT=3001 npm start
+```
+
+---
+
 ## Important Notes
 
 - Scans use Puppeteer (headless Chrome). First `npm install` downloads Chromium (~170 MB).
@@ -210,3 +266,4 @@ Open http://localhost:3000 in the browser for the full visual dashboard:
 - Websites behind login walls or with aggressive bot protection may fail to scan.
 - All data is stored locally in `data/seo-optimizer.db` (SQLite). Nothing is transmitted externally.
 - The `data/` directory is created on first run. Delete it and run `npm run reset` to start fresh.
+- The server includes global error handling — it will never crash from a failed scan.

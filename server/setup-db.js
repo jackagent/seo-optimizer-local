@@ -92,17 +92,77 @@ db.exec(`
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
   );
 
-  -- Generated content / articles
+  -- YouTube SEO analyses
+  CREATE TABLE IF NOT EXISTS youtube_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    youtube_url TEXT NOT NULL,
+    channel_name TEXT,
+    video_title TEXT,
+    video_description TEXT,
+    tags_json TEXT DEFAULT '[]',
+    thumbnail_url TEXT,
+    view_count INTEGER,
+    like_count INTEGER,
+    comment_count INTEGER,
+    subscriber_count INTEGER,
+    duration TEXT,
+    published_at TEXT,
+    seo_score INTEGER,
+    issues_json TEXT DEFAULT '[]',
+    recommendations_json TEXT DEFAULT '[]',
+    analysis_data_json TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+  );
+
+  -- Generated articles with AI images
   CREATE TABLE IF NOT EXISTS articles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    company_id INTEGER NOT NULL,
+    company_id INTEGER,
     title TEXT NOT NULL,
     content TEXT,
+    summary TEXT,
+    keywords_json TEXT DEFAULT '[]',
     platform TEXT DEFAULT 'blog',
-    status TEXT DEFAULT 'draft',
+    tone TEXT DEFAULT 'professional',
+    language TEXT DEFAULT 'de',
+    word_count INTEGER DEFAULT 0,
     seo_score INTEGER,
+    hero_image_url TEXT,
+    hero_image_prompt TEXT,
+    inline_images_json TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'draft',
     created_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+  );
+
+  -- Social media outreach campaigns
+  CREATE TABLE IF NOT EXISTS outreach_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER,
+    platform TEXT NOT NULL DEFAULT 'linkedin',
+    campaign_name TEXT,
+    target_audience TEXT,
+    tone TEXT DEFAULT 'professional',
+    language TEXT DEFAULT 'de',
+    hook TEXT,
+    message_body TEXT,
+    call_to_action TEXT,
+    hashtags_json TEXT DEFAULT '[]',
+    image_prompt TEXT,
+    image_url TEXT,
+    status TEXT DEFAULT 'draft',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+  );
+
+  -- API settings (for LLM and image generation)
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
   );
 `);
 

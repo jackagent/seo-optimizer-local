@@ -1,7 +1,7 @@
 {
   "name": "seo-optimizer-local",
-  "version": "2.1.0",
-  "description": "Sentinel — Enterprise SEO & Compliance Intelligence Platform. Runs locally on Mac Mini with SQLite.",
+  "version": "3.0.0",
+  "description": "Sentinel — Enterprise SEO & Compliance Intelligence Platform with YouTube SEO Analyzer, AI Article Generator, and Social Media Outreach Bot. Runs locally with SQLite.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

@@ -13,8 +13,84 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Auto-migrate: add new tables if they don't exist yet (for existing DBs)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS youtube_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER,
+      youtube_url TEXT NOT NULL,
+      channel_name TEXT,
+      video_title TEXT,
+      video_description TEXT,
+      tags_json TEXT DEFAULT '[]',
+      thumbnail_url TEXT,
+      view_count INTEGER,
+      like_count INTEGER,
+      comment_count INTEGER,
+      subscriber_count INTEGER,
+      duration TEXT,
+      published_at TEXT,
+      seo_score INTEGER,
+      issues_json TEXT DEFAULT '[]',
+      recommendations_json TEXT DEFAULT '[]',
+      analysis_data_json TEXT DEFAULT '{}',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS articles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER,
+      title TEXT NOT NULL,
+      content TEXT,
+      summary TEXT,
+      keywords_json TEXT DEFAULT '[]',
+      platform TEXT DEFAULT 'blog',
+      tone TEXT DEFAULT 'professional',
+      language TEXT DEFAULT 'de',
+      word_count INTEGER DEFAULT 0,
+      seo_score INTEGER,
+      hero_image_url TEXT,
+      hero_image_prompt TEXT,
+      inline_images_json TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'draft',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER,
+      platform TEXT NOT NULL DEFAULT 'linkedin',
+      campaign_name TEXT,
+      target_audience TEXT,
+      tone TEXT DEFAULT 'professional',
+      language TEXT DEFAULT 'de',
+      hook TEXT,
+      message_body TEXT,
+      call_to_action TEXT,
+      hashtags_json TEXT DEFAULT '[]',
+      image_prompt TEXT,
+      image_url TEXT,
+      status TEXT DEFAULT 'draft',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+} catch (e) {
+  // Tables already exist, ignore
+}
+
 module.exports = {
-  // Companies
+  // ==================== Companies ====================
   getAllCompanies() {
     return db.prepare('SELECT * FROM companies WHERE is_active = 1 ORDER BY name').all();
   },
@@ -30,7 +106,6 @@ module.exports = {
   },
 
   updateCompany(id, data) {
-    // Only update fields that are actually provided (not undefined)
     const allowed = ['name', 'url', 'description', 'sector', 'hosting_platform', 'is_active', 'is_parked_domain'];
     const updates = {};
     for (const key of allowed) {
@@ -46,7 +121,7 @@ module.exports = {
     db.prepare('DELETE FROM companies WHERE id = ?').run(id);
   },
 
-  // Company Details
+  // ==================== Company Details ====================
   getCompanyDetails(companyId) {
     return db.prepare('SELECT * FROM company_details WHERE company_id = ?').get(companyId);
   },
@@ -67,7 +142,7 @@ module.exports = {
     }
   },
 
-  // Scans
+  // ==================== Scans ====================
   getLatestScan(companyId) {
     return db.prepare('SELECT * FROM scans WHERE company_id = ? ORDER BY scanned_at DESC LIMIT 1').get(companyId);
   },
@@ -97,7 +172,7 @@ module.exports = {
     return db.prepare('SELECT * FROM scans WHERE company_id = ? ORDER BY scanned_at DESC LIMIT 20').all(companyId);
   },
 
-  // Documents
+  // ==================== Documents ====================
   getDocuments(companyId) {
     return db.prepare('SELECT * FROM company_documents WHERE company_id = ? ORDER BY uploaded_at DESC').all(companyId);
   },
@@ -116,7 +191,7 @@ module.exports = {
     db.prepare('DELETE FROM company_documents WHERE id = ?').run(id);
   },
 
-  // Dashboard stats
+  // ==================== Dashboard Stats ====================
   getDashboardStats() {
     const companies = db.prepare('SELECT COUNT(*) as count FROM companies WHERE is_active = 1').get();
     const avgScore = db.prepare(`
@@ -128,7 +203,6 @@ module.exports = {
     const today = new Date().toISOString().split('T')[0];
     const scansToday = db.prepare("SELECT COUNT(*) as count FROM scans WHERE scanned_at >= ?").get(today);
 
-    // Count critical issues from latest scans
     let criticalIssues = 0;
     const latestScans = db.prepare(`
       SELECT issues_json FROM scans s
@@ -142,15 +216,22 @@ module.exports = {
       } catch {}
     }
 
+    const articles = db.prepare('SELECT COUNT(*) as count FROM articles').get();
+    const campaigns = db.prepare('SELECT COUNT(*) as count FROM outreach_campaigns').get();
+    const ytAnalyses = db.prepare('SELECT COUNT(*) as count FROM youtube_analyses').get();
+
     return {
       totalCompanies: companies.count,
       avgScore: Math.round(avgScore.avg || 0),
       criticalIssues,
-      scansToday: scansToday.count
+      scansToday: scansToday.count,
+      totalArticles: articles.count,
+      totalCampaigns: campaigns.count,
+      totalYoutubeAnalyses: ytAnalyses.count
     };
   },
 
-  // Discrepancies
+  // ==================== Discrepancies ====================
   getAllDiscrepancies() {
     const scans = db.prepare(`
       SELECT s.company_id, s.discrepancies_json, s.scanned_at, c.name as company_name, c.url as company_url
@@ -168,5 +249,140 @@ module.exports = {
       scannedAt: s.scanned_at,
       discrepancies: JSON.parse(s.discrepancies_json || '[]')
     })).filter(s => s.discrepancies.length > 0);
+  },
+
+  // ==================== YouTube Analyses ====================
+  createYoutubeAnalysis(data) {
+    const result = db.prepare(`
+      INSERT INTO youtube_analyses (company_id, youtube_url, status)
+      VALUES (?, ?, 'pending')
+    `).run(data.company_id || null, data.youtube_url);
+    return result.lastInsertRowid;
+  },
+
+  updateYoutubeAnalysis(id, data) {
+    const fields = Object.keys(data).map(k => `${k}=@${k}`).join(', ');
+    db.prepare(`UPDATE youtube_analyses SET ${fields} WHERE id = @id`).run({ ...data, id });
+  },
+
+  getYoutubeAnalysis(id) {
+    return db.prepare('SELECT * FROM youtube_analyses WHERE id = ?').get(id);
+  },
+
+  getAllYoutubeAnalyses() {
+    return db.prepare('SELECT * FROM youtube_analyses ORDER BY created_at DESC LIMIT 50').all();
+  },
+
+  deleteYoutubeAnalysis(id) {
+    db.prepare('DELETE FROM youtube_analyses WHERE id = ?').run(id);
+  },
+
+  // ==================== Articles ====================
+  createArticle(data) {
+    const result = db.prepare(`
+      INSERT INTO articles (company_id, title, content, summary, keywords_json, platform, tone, language, word_count, seo_score, hero_image_url, hero_image_prompt, inline_images_json, status)
+      VALUES (@company_id, @title, @content, @summary, @keywords_json, @platform, @tone, @language, @word_count, @seo_score, @hero_image_url, @hero_image_prompt, @inline_images_json, @status)
+    `).run({
+      company_id: data.company_id || null,
+      title: data.title || 'Untitled',
+      content: data.content || '',
+      summary: data.summary || '',
+      keywords_json: data.keywords_json || '[]',
+      platform: data.platform || 'blog',
+      tone: data.tone || 'professional',
+      language: data.language || 'de',
+      word_count: data.word_count || 0,
+      seo_score: data.seo_score || null,
+      hero_image_url: data.hero_image_url || null,
+      hero_image_prompt: data.hero_image_prompt || null,
+      inline_images_json: data.inline_images_json || '[]',
+      status: data.status || 'draft'
+    });
+    return result.lastInsertRowid;
+  },
+
+  updateArticle(id, data) {
+    const allowed = ['title', 'content', 'summary', 'keywords_json', 'platform', 'tone', 'language', 'word_count', 'seo_score', 'hero_image_url', 'hero_image_prompt', 'inline_images_json', 'status'];
+    const updates = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updates[key] = data[key];
+    }
+    if (Object.keys(updates).length === 0) return;
+    const fields = Object.keys(updates).map(k => `${k}=@${k}`).join(', ');
+    db.prepare(`UPDATE articles SET ${fields} WHERE id = @id`).run({ ...updates, id });
+  },
+
+  getArticle(id) {
+    return db.prepare('SELECT * FROM articles WHERE id = ?').get(id);
+  },
+
+  getAllArticles() {
+    return db.prepare('SELECT * FROM articles ORDER BY created_at DESC LIMIT 50').all();
+  },
+
+  deleteArticle(id) {
+    db.prepare('DELETE FROM articles WHERE id = ?').run(id);
+  },
+
+  // ==================== Outreach Campaigns ====================
+  createCampaign(data) {
+    const result = db.prepare(`
+      INSERT INTO outreach_campaigns (company_id, platform, campaign_name, target_audience, tone, language, hook, message_body, call_to_action, hashtags_json, image_prompt, image_url, status)
+      VALUES (@company_id, @platform, @campaign_name, @target_audience, @tone, @language, @hook, @message_body, @call_to_action, @hashtags_json, @image_prompt, @image_url, @status)
+    `).run({
+      company_id: data.company_id || null,
+      platform: data.platform || 'linkedin',
+      campaign_name: data.campaign_name || '',
+      target_audience: data.target_audience || '',
+      tone: data.tone || 'professional',
+      language: data.language || 'de',
+      hook: data.hook || '',
+      message_body: data.message_body || '',
+      call_to_action: data.call_to_action || '',
+      hashtags_json: data.hashtags_json || '[]',
+      image_prompt: data.image_prompt || null,
+      image_url: data.image_url || null,
+      status: data.status || 'draft'
+    });
+    return result.lastInsertRowid;
+  },
+
+  updateCampaign(id, data) {
+    const allowed = ['platform', 'campaign_name', 'target_audience', 'tone', 'language', 'hook', 'message_body', 'call_to_action', 'hashtags_json', 'image_prompt', 'image_url', 'status'];
+    const updates = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updates[key] = data[key];
+    }
+    if (Object.keys(updates).length === 0) return;
+    const fields = Object.keys(updates).map(k => `${k}=@${k}`).join(', ');
+    db.prepare(`UPDATE outreach_campaigns SET ${fields} WHERE id = @id`).run({ ...updates, id });
+  },
+
+  getCampaign(id) {
+    return db.prepare('SELECT * FROM outreach_campaigns WHERE id = ?').get(id);
+  },
+
+  getAllCampaigns() {
+    return db.prepare('SELECT * FROM outreach_campaigns ORDER BY created_at DESC LIMIT 50').all();
+  },
+
+  deleteCampaign(id) {
+    db.prepare('DELETE FROM outreach_campaigns WHERE id = ?').run(id);
+  },
+
+  // ==================== Settings ====================
+  getSetting(key) {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    return row ? row.value : null;
+  },
+
+  setSetting(key, value) {
+    db.prepare(`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`)
+      .run(key, value);
+  },
+
+  getAllSettings() {
+    return db.prepare('SELECT * FROM settings').all();
   }
 };

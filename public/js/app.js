@@ -4,13 +4,15 @@ let currentCompanyId = null;
 let companies = [];
 let stats = {};
 let discrepancies = [];
+let currentYoutubeId = null;
+let currentArticleId = null;
+let currentCampaignId = null;
 
 // ==================== Language ====================
 function switchLanguage() {
   const newLang = toggleLang();
   updateSidebarLanguage();
   updateHeaderLanguage();
-  // Re-render current page
   if (currentPage === 'company-detail' && currentCompanyId) {
     renderCompanyDetail(currentCompanyId);
   } else {
@@ -23,32 +25,37 @@ function updateSidebarLanguage() {
   document.getElementById('lang-flag').textContent = lang === 'de' ? 'DE' : 'EN';
   document.getElementById('lang-label').textContent = lang === 'de' ? 'Deutsch' : 'English';
 
-  // Update nav items
-  const navItems = document.querySelectorAll('.nav-item');
-  const navLabels = [
-    'nav.commandCenter', 'nav.portfolioGrid', 'nav.companies', 'nav.scanAll',
-    'nav.discrepancies', 'nav.reports', 'nav.export'
-  ];
-  navItems.forEach((item, i) => {
-    if (navLabels[i]) {
-      // Keep the SVG, update only text
+  const navMap = {
+    'home': 'nav.commandCenter',
+    'dashboard': 'nav.portfolioGrid',
+    'companies': 'nav.companies',
+    'scan-all': 'nav.scanAll',
+    'discrepancies': 'nav.discrepancies',
+    'youtube': 'nav.youtube',
+    'articles': 'nav.articles',
+    'outreach': 'nav.outreach',
+    'settings': 'nav.settings'
+  };
+
+  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+    const page = item.getAttribute('data-page');
+    const key = navMap[page];
+    if (key) {
       const svg = item.querySelector('svg');
       const badge = item.querySelector('.nav-badge');
       item.textContent = '';
       if (svg) item.appendChild(svg);
-      item.appendChild(document.createTextNode(' ' + t(navLabels[i])));
+      item.appendChild(document.createTextNode(' ' + t(key)));
       if (badge) item.appendChild(badge);
     }
   });
 
-  // Update section labels
   const sectionLabels = document.querySelectorAll('.nav-section-label');
-  const sectionKeys = ['nav.overview', 'nav.management', 'nav.intelligence'];
+  const sectionKeys = ['nav.overview', 'nav.management', 'nav.contentTools', 'nav.analysis', 'nav.system'];
   sectionLabels.forEach((el, i) => {
     if (sectionKeys[i]) el.textContent = t(sectionKeys[i]);
   });
 
-  // Update header buttons
   const headerActions = document.getElementById('header-actions');
   if (headerActions) {
     const btns = headerActions.querySelectorAll('.btn');
@@ -73,7 +80,14 @@ function updateHeaderLanguage() {
     dashboard: ['page.portfolioGrid', 'page.portfolioGrid.sub'],
     companies: ['page.companies', 'page.companies.sub'],
     discrepancies: ['page.discrepancies', 'page.discrepancies.sub'],
-    'company-detail': ['page.companyDetail', '']
+    'company-detail': ['page.companyDetail', ''],
+    youtube: ['page.youtube', 'page.youtube.sub'],
+    'youtube-detail': ['page.youtube', ''],
+    articles: ['page.articles', 'page.articles.sub'],
+    'article-detail': ['page.articles', ''],
+    outreach: ['page.outreach', 'page.outreach.sub'],
+    'outreach-detail': ['page.outreach', ''],
+    settings: ['page.settings', 'page.settings.sub']
   };
   const [titleKey, subKey] = titles[currentPage] || ['page.commandCenter', ''];
   document.getElementById('header-title').textContent = t(titleKey);
@@ -88,8 +102,6 @@ function navigate(page, data) {
   if (navBtn) navBtn.classList.add('active');
 
   updateHeaderLanguage();
-
-  // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
 
   switch (page) {
@@ -98,6 +110,13 @@ function navigate(page, data) {
     case 'companies': renderCompanies(); break;
     case 'company-detail': renderCompanyDetail(data); break;
     case 'discrepancies': renderDiscrepancies(); break;
+    case 'youtube': renderYouTube(); break;
+    case 'youtube-detail': renderYouTubeDetail(data); break;
+    case 'articles': renderArticles(); break;
+    case 'article-detail': renderArticleDetail(data); break;
+    case 'outreach': renderOutreach(); break;
+    case 'outreach-detail': renderOutreachDetail(data); break;
+    case 'settings': renderSettings(); break;
     default: renderHome();
   }
 }
@@ -106,7 +125,6 @@ function navigate(page, data) {
 async function api(url, opts = {}) {
   try {
     const fetchOpts = { ...opts };
-    // Only set Content-Type for JSON requests (not FormData)
     if (!opts.body || typeof opts.body === 'string') {
       fetchOpts.headers = { 'Content-Type': 'application/json', ...opts.headers };
     }
@@ -196,6 +214,10 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => showToast(t('toast.copied')));
+}
+
 // ==================== Home Page ====================
 async function renderHome() {
   const app = document.getElementById('main-body');
@@ -216,13 +238,11 @@ async function renderHome() {
   discrepancies = discData || [];
   companies = companiesData || [];
 
-  // Update discrepancy badge
   const badge = document.getElementById('discrepancy-badge');
   const totalDisc = discrepancies.reduce((sum, d) => sum + (d.discrepancies?.length || 0), 0);
   if (totalDisc > 0) { badge.textContent = totalDisc; badge.style.display = 'inline'; }
   else { badge.style.display = 'none'; }
 
-  // If no companies, show onboarding
   if (companies.length === 0) {
     app.innerHTML = renderOnboarding();
     return;
@@ -230,28 +250,14 @@ async function renderHome() {
 
   let html = '';
 
-  // Stats
   html += `
     <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">${t('stats.portfolioCompanies')}</div>
-        <div class="stat-value">${stats.totalCompanies}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">${t('stats.avgScore')}</div>
-        <div class="stat-value ${stats.avgScore >= 70 ? 'good' : stats.avgScore < 50 ? 'alert' : ''}">${stats.avgScore}<span class="suffix">/100</span></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">${t('stats.criticalIssues')}</div>
-        <div class="stat-value ${stats.criticalIssues > 0 ? 'alert' : ''}">${stats.criticalIssues}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">${t('stats.scansToday')}</div>
-        <div class="stat-value">${stats.scansToday}</div>
-      </div>
+      <div class="stat-card"><div class="stat-label">${t('stats.portfolioCompanies')}</div><div class="stat-value">${stats.totalCompanies}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('stats.avgScore')}</div><div class="stat-value ${stats.avgScore >= 70 ? 'good' : stats.avgScore < 50 ? 'alert' : ''}">${stats.avgScore}<span class="suffix">/100</span></div></div>
+      <div class="stat-card"><div class="stat-label">${t('stats.criticalIssues')}</div><div class="stat-value ${stats.criticalIssues > 0 ? 'alert' : ''}">${stats.criticalIssues}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('stats.scansToday')}</div><div class="stat-value">${stats.scansToday}</div></div>
     </div>`;
 
-  // Discrepancy banner
   if (discrepancies.length > 0) {
     const discWord = totalDisc > 1 ? t('disc.mismatches') : t('disc.mismatch');
     const compWord = discrepancies.length > 1 ? t('disc.companies') : t('disc.company');
@@ -261,7 +267,6 @@ async function renderHome() {
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           <h3>${t('disc.detected')} \u2014 ${totalDisc} ${discWord} ${t('disc.across')} ${discrepancies.length} ${compWord}</h3>
         </div>`;
-
     for (const item of discrepancies) {
       html += `
         <div style="margin-bottom:14px">
@@ -284,154 +289,111 @@ async function renderHome() {
     html += `</div>`;
   }
 
-  // Tutorial banner for demo company
-  const hasDemo = companies.some(c => c.name && c.name.includes('(Demo)'));
-  if (hasDemo) {
+  // Tutorial banner
+  const hasMeridian = companies.some(c => c.name && c.name.includes('Meridian'));
+  if (hasMeridian) {
     html += `
       <div class="tutorial-banner">
-        <div class="tutorial-banner-icon">\uD83C\uDF93</div>
-        <div class="tutorial-banner-text">
-          <div class="tutorial-banner-title">${t('tutorial.title')}</div>
-          <div class="tutorial-banner-desc">${t('tutorial.desc')}</div>
-        </div>
+        <strong>${t('tutorial.title')}</strong>
+        <p style="margin:4px 0 0;font-size:12px;color:var(--text-muted)">${t('tutorial.desc')}</p>
       </div>`;
   }
 
   // Company cards
-  html += `<div class="cards-grid">`;
+  html += `<div class="company-grid">`;
   for (const c of companies) {
     const scan = c.latestScan;
-    const score = scan?.overall_score || 0;
-    const isDemo = c.name && c.name.includes('(Demo)');
+    const score = scan ? scan.overall_score : 0;
+    const scannedAt = scan ? scan.scanned_at : null;
+    const pagesCrawled = scan ? scan.pages_crawled : 0;
     html += `
       <div class="company-card" onclick="navigate('company-detail',${c.id})">
-        <div class="card-header">
+        <div class="company-card-header">
           <div>
-            <div class="card-name">${escapeHtml(c.name)}</div>
-            <div class="card-url">${escapeHtml(c.url)}</div>
-            <div class="card-tags">
-              ${c.sector ? `<span class="tag tag-sector">${escapeHtml(c.sector)}</span>` : ''}
-              ${c.hosting_platform ? `<span class="tag tag-platform">${escapeHtml(c.hosting_platform)}</span>` : ''}
-              ${c.is_parked_domain ? '<span class="tag tag-parked">PARKED</span>' : ''}
-              ${isDemo ? '<span class="tag tag-demo">DEMO</span>' : ''}
-            </div>
+            <div class="company-name">${escapeHtml(c.name)}</div>
+            <div class="company-url">${escapeHtml(c.url)}</div>
           </div>
-          ${scan ? scoreGaugeSVG(score) : `<div style="font-size:11px;color:var(--text-subtle);padding:8px">${t('card.noScan')}</div>`}
+          ${scoreGaugeSVG(score, 52)}
         </div>
-        ${scan ? `
-          <div class="score-bars">
-            ${[t('score.meta'), t('score.content'), t('score.technical'), t('score.legal')].map((label, i) => {
-              const val = [scan.meta_score, scan.content_score, scan.technical_score, scan.legal_score][i] || 0;
-              return `<div><div class="score-bar-label"><span>${label}</span><span>${val}</span></div><div class="score-bar-track"><div class="score-bar-fill ${fillClass(val)}" style="width:${val}%"></div></div></div>`;
-            }).join('')}
+        <div class="company-card-body">
+          <div class="company-meta">
+            ${c.sector ? `<span class="tag">${escapeHtml(c.sector)}</span>` : ''}
+            ${c.hosting_platform ? `<span class="tag">${escapeHtml(c.hosting_platform)}</span>` : ''}
           </div>
-          <div class="badges">
-            <span class="badge ${scan.has_impressum ? 'badge-ok' : 'badge-fail'}">${scan.has_impressum ? '\u2713' : '\u2717'} ${t('legal.impressum')}</span>
-            <span class="badge ${scan.has_privacy_policy ? 'badge-ok' : 'badge-fail'}">${scan.has_privacy_policy ? '\u2713' : '\u2717'} ${t('legal.privacy')}</span>
-            <span class="badge ${scan.has_terms_of_service ? 'badge-ok' : 'badge-fail'}">${scan.has_terms_of_service ? '\u2713' : '\u2717'} ${t('legal.terms')}</span>
+          <div class="company-stats">
+            <span>${scannedAt ? `${t('card.scanned')} ${timeAgo(scannedAt)}` : t('card.noScan')}</span>
+            ${pagesCrawled ? `<span>${pagesCrawled} ${t('card.pagesCrawled')}</span>` : ''}
           </div>
-          <div class="card-footer">${t('card.scanned')} ${timeAgo(scan.scanned_at)} \u00B7 ${scan.pages_crawled || 0} ${t('card.pagesCrawled')}</div>
-        ` : `<div class="card-footer">${t('card.noScanClick')}</div>`}
+        </div>
       </div>`;
   }
   html += `</div>`;
-
   app.innerHTML = html;
 }
 
-// ==================== Onboarding ====================
 function renderOnboarding() {
   return `
-    <div class="welcome-section">
-      <div class="welcome-icon">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <path d="M16 3l11 6.5v13L16 29 5 22.5v-13z" stroke="white" stroke-width="1.5" fill="none"/>
-          <circle cx="16" cy="16" r="4" fill="white" opacity="0.9"/>
-        </svg>
+    <div class="onboarding">
+      <div class="onboarding-hero">
+        <h1>${t('onboard.welcome')}</h1>
+        <p>${t('onboard.subtitle')}</p>
       </div>
-      <h1 class="welcome-title">${t('onboard.welcome')}</h1>
-      <p class="welcome-subtitle">${t('onboard.subtitle')}</p>
-
-      <div class="welcome-features">
-        <div class="welcome-feature">
-          <div class="welcome-feature-icon">\uD83D\uDD0D</div>
-          <div class="welcome-feature-title">${t('onboard.feature1.title')}</div>
-          <div class="welcome-feature-desc">${t('onboard.feature1.desc')}</div>
+      <div class="onboarding-features">
+        <div class="onboarding-feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-400)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h3>${t('onboard.feature1.title')}</h3>
+          <p>${t('onboard.feature1.desc')}</p>
         </div>
-        <div class="welcome-feature">
-          <div class="welcome-feature-icon">\u2696\uFE0F</div>
-          <div class="welcome-feature-title">${t('onboard.feature2.title')}</div>
-          <div class="welcome-feature-desc">${t('onboard.feature2.desc')}</div>
+        <div class="onboarding-feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-400)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>${t('onboard.feature2.title')}</h3>
+          <p>${t('onboard.feature2.desc')}</p>
         </div>
-        <div class="welcome-feature">
-          <div class="welcome-feature-icon">\u26A0\uFE0F</div>
-          <div class="welcome-feature-title">${t('onboard.feature3.title')}</div>
-          <div class="welcome-feature-desc">${t('onboard.feature3.desc')}</div>
+        <div class="onboarding-feature">
+          <div class="feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-400)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3>${t('onboard.feature3.title')}</h3>
+          <p>${t('onboard.feature3.desc')}</p>
         </div>
       </div>
-
-      <div style="display:flex;gap:10px;justify-content:center">
-        <button class="btn btn-primary" onclick="showAddCompanyModal()" style="padding:12px 28px;font-size:14px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          ${t('onboard.addFirst')}
-        </button>
-        <button class="btn" onclick="seedDemoCompany()" style="padding:12px 28px;font-size:14px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          ${t('onboard.tryDemo')}
-        </button>
+      <div class="onboarding-actions">
+        <button class="btn btn-primary btn-lg" onclick="showAddCompanyModal()">${t('onboard.addFirst')}</button>
+        <button class="btn btn-lg" onclick="loadDemo()">${t('onboard.tryDemo')}</button>
       </div>
     </div>`;
 }
 
-async function seedDemoCompany() {
+async function loadDemo() {
   showToast(t('toast.demoCreated'), 'info');
-  const result = await api('/api/seed-demo', { method: 'POST' });
-  if (result && result.success) {
-    navigate('home');
-  }
+  await api('/api/seed-demo', { method: 'POST' });
+  navigate('home');
 }
 
-// ==================== Dashboard Grid ====================
+// ==================== Dashboard (Portfolio Grid) ====================
 async function renderDashboard() {
   const app = document.getElementById('main-body');
   app.innerHTML = '<div class="spinner"></div>';
-
-  const companiesData = await api('/api/dashboard/companies');
-  if (!companiesData) return;
-  companies = companiesData;
-
-  if (companies.length === 0) {
-    app.innerHTML = `<div class="empty-state"><div class="empty-icon">\uD83D\uDCCA</div><div class="empty-title">${t('empty.noDashboard')}</div><div class="empty-desc">${t('empty.noDashboardDesc')}</div><button class="btn btn-primary" onclick="showAddCompanyModal()">+ ${t('header.addCompany')}</button></div>`;
+  const data = await api('/api/dashboard/companies');
+  if (!data || data.length === 0) {
+    app.innerHTML = `<div class="empty-state"><div class="empty-title">${t('empty.noDashboard')}</div><div class="empty-desc">${t('empty.noDashboardDesc')}</div></div>`;
     return;
   }
-
-  let html = `<div class="cards-grid">`;
-  for (const c of companies) {
-    const scan = c.latestScan;
-    const score = scan?.overall_score || 0;
+  let html = `<div class="portfolio-grid">`;
+  for (const c of data) {
+    const score = c.latestScan ? c.latestScan.overall_score : 0;
     html += `
-      <div class="company-card" onclick="navigate('company-detail',${c.id})">
-        <div class="card-header">
-          <div>
-            <div class="card-name">${escapeHtml(c.name)}</div>
-            <div class="card-url">${escapeHtml(c.url)}</div>
-          </div>
-          ${scan ? scoreGaugeSVG(score) : `<div style="font-size:11px;color:var(--text-subtle)">${t('card.noScan')}</div>`}
+      <div class="portfolio-card" onclick="navigate('company-detail',${c.id})">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-weight:700;font-size:14px">${escapeHtml(c.name)}</div>
+          ${scoreGaugeSVG(score, 44)}
         </div>
-        ${scan ? `
-          <div class="score-bars">
-            ${[t('score.meta'), t('score.content'), t('score.technical'), t('score.legal')].map((label, i) => {
-              const val = [scan.meta_score, scan.content_score, scan.technical_score, scan.legal_score][i] || 0;
-              return `<div><div class="score-bar-label"><span>${label}</span><span>${val}</span></div><div class="score-bar-track"><div class="score-bar-fill ${fillClass(val)}" style="width:${val}%"></div></div></div>`;
-            }).join('')}
-          </div>
-          <div class="badges">
-            <span class="badge ${scan.has_impressum ? 'badge-ok' : 'badge-fail'}">${scan.has_impressum ? '\u2713' : '\u2717'} ${t('legal.impressum')}</span>
-            <span class="badge ${scan.has_privacy_policy ? 'badge-ok' : 'badge-fail'}">${scan.has_privacy_policy ? '\u2713' : '\u2717'} ${t('legal.privacy')}</span>
-            <span class="badge ${scan.has_terms_of_service ? 'badge-ok' : 'badge-fail'}">${scan.has_terms_of_service ? '\u2713' : '\u2717'} ${t('legal.terms')}</span>
-          </div>
-          <div class="card-footer">${t('card.scanned')} ${timeAgo(scan.scanned_at)}</div>
-        ` : `<div class="card-footer" style="text-align:center">${t('card.noScan')}</div>`}
+        <div style="font-size:11px;color:var(--text-muted)">${escapeHtml(c.url)}</div>
+        ${c.sector ? `<div style="margin-top:6px"><span class="tag">${escapeHtml(c.sector)}</span></div>` : ''}
       </div>`;
   }
   html += `</div>`;
@@ -442,26 +404,22 @@ async function renderDashboard() {
 async function renderCompanies() {
   const app = document.getElementById('main-body');
   app.innerHTML = '<div class="spinner"></div>';
-
-  const data = await api('/api/companies');
-  if (!data) return;
-
-  if (data.length === 0) {
-    app.innerHTML = `<div class="empty-state"><div class="empty-icon">\uD83C\uDFE2</div><div class="empty-title">${t('empty.noCompanies')}</div><div class="empty-desc">${t('empty.noCompaniesDesc')}</div><button class="btn btn-primary" onclick="showAddCompanyModal()">+ ${t('header.addCompany')}</button></div>`;
+  const data = await api('/api/dashboard/companies');
+  if (!data || data.length === 0) {
+    app.innerHTML = `<div class="empty-state"><div class="empty-title">${t('empty.noCompanies')}</div><div class="empty-desc">${t('empty.noCompaniesDesc')}</div></div>`;
     return;
   }
-
-  let html = `<div style="display:flex;flex-direction:column;gap:6px">`;
+  let html = `<div class="companies-list">`;
   for (const c of data) {
     html += `
-      <div class="company-list-item" onclick="navigate('company-detail',${c.id})">
-        <div>
-          <div class="doc-name">${escapeHtml(c.name)}</div>
-          <div class="doc-meta">${escapeHtml(c.url)} ${c.sector ? '\u00B7 ' + escapeHtml(c.sector) : ''} ${c.hosting_platform ? '\u00B7 ' + escapeHtml(c.hosting_platform) : ''}</div>
+      <div class="company-row" onclick="navigate('company-detail',${c.id})">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${escapeHtml(c.name)}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(c.url)} ${c.sector ? `\u00B7 ${escapeHtml(c.sector)}` : ''}</div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="event.stopPropagation();triggerScan(${c.id})">${t('detail.rescan')}</button>
-          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCompany(${c.id},'${escapeHtml(c.name).replace(/'/g, "\\'")}')">${t('docs.delete')}</button>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-weight:700;color:${scoreColor(c.latestScan ? c.latestScan.overall_score : 0)}">${c.latestScan ? c.latestScan.overall_score : '\u2014'}</div>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCompany(${c.id},'${escapeHtml(c.name)}')">\u2717</button>
         </div>
       </div>`;
   }
@@ -473,29 +431,18 @@ async function renderCompanies() {
 async function renderDiscrepancies() {
   const app = document.getElementById('main-body');
   app.innerHTML = '<div class="spinner"></div>';
-
-  const discData = await api('/api/dashboard/discrepancies');
-  if (!discData) return;
-  discrepancies = discData;
-
-  const totalDisc = discrepancies.reduce((sum, d) => sum + (d.discrepancies?.length || 0), 0);
-
-  if (totalDisc === 0) {
-    app.innerHTML = `<div class="empty-state"><div class="empty-icon">\u2705</div><div class="empty-title">${t('disc.noDiscrepancies')}</div><div class="empty-desc">${t('disc.allMatch')}</div></div>`;
+  const data = await api('/api/dashboard/discrepancies');
+  if (!data || data.length === 0) {
+    app.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size:40px;margin-bottom:12px">\u2705</div>
+        <div class="empty-title">${t('disc.noDiscrepancies')}</div>
+        <div class="empty-desc">${t('disc.allMatch')}</div>
+      </div>`;
     return;
   }
-
-  const discWord = totalDisc > 1 ? t('disc.mismatches') : t('disc.mismatch');
-  const compWord = discrepancies.length > 1 ? t('disc.companies') : t('disc.company');
-
-  let html = `
-    <div class="discrepancy-banner">
-      <div class="discrepancy-header">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <h3>${totalDisc} ${discWord} ${t('disc.across')} ${discrepancies.length} ${compWord}</h3>
-      </div>`;
-
-  for (const item of discrepancies) {
+  let html = `<div class="discrepancy-banner">`;
+  for (const item of data) {
     html += `
       <div style="margin-bottom:16px">
         <div style="font-size:14px;font-weight:700;margin-bottom:8px;cursor:pointer" onclick="navigate('company-detail',${item.companyId})">
@@ -523,7 +470,6 @@ async function renderCompanyDetail(companyId) {
   currentCompanyId = companyId;
   const app = document.getElementById('main-body');
   app.innerHTML = '<div class="spinner"></div>';
-
   const data = await api(`/api/companies/${companyId}`);
   if (!data) return;
   const scan = data.latestScan;
@@ -559,7 +505,6 @@ async function renderCompanyDetail(companyId) {
       </div>
     </div>`;
 
-  // Discrepancy alert
   if (scan) {
     const disc = JSON.parse(scan.discrepancies_json || '[]');
     if (disc.length > 0) {
@@ -585,20 +530,15 @@ async function renderCompanyDetail(companyId) {
     }
   }
 
-  // Scores
   if (scan) {
     html += `
       <div class="detail-scores">
         ${[[t('score.overall'), scan.overall_score], [t('score.meta'), scan.meta_score], [t('score.content'), scan.content_score], [t('score.technical'), scan.technical_score], [t('score.legal'), scan.legal_score]].map(([label, val]) => `
-          <div class="detail-score-card">
-            <div class="label">${label}</div>
-            <div class="value" style="color:${scoreColor(val || 0)}">${val || 0}</div>
-          </div>
+          <div class="detail-score-card"><div class="label">${label}</div><div class="value" style="color:${scoreColor(val || 0)}">${val || 0}</div></div>
         `).join('')}
       </div>`;
   }
 
-  // Tabs
   html += `
     <div class="tabs">
       <button class="tab active" onclick="switchTab(this,'tab-issues')">${t('tab.issues')}</button>
@@ -668,10 +608,7 @@ async function renderCompanyDetail(companyId) {
     html += `
       <div class="info-grid">
         ${[[t('info.companyNumber'), d.company_number], [t('info.companyType'), d.company_type], [t('info.jurisdiction'), d.jurisdiction], [t('info.address'), d.registered_address], [t('info.incDate'), d.incorporation_date], [t('info.vat'), d.vat_number], [t('info.email'), d.registered_email], [t('info.phone'), d.registered_phone], [t('info.director'), d.lead_director], [t('info.directorTitle'), d.lead_director_title], [t('info.localDirector'), d.local_director], [t('info.shareCapital'), d.share_capital], [t('info.shareType'), d.share_type], [t('info.shareCount'), d.share_count]].map(([label, val]) => `
-          <div class="info-card">
-            <div class="info-label">${label}</div>
-            <div class="info-value">${val || '<span class="info-empty">' + t('info.notSpecified') + '</span>'}</div>
-          </div>
+          <div class="info-card"><div class="info-label">${label}</div><div class="info-value">${val || '<span class="info-empty">' + t('info.notSpecified') + '</span>'}</div></div>
         `).join('')}
       </div>
       <div class="mt-4"><button class="btn btn-sm" onclick="showEditDetailsModal(${data.id}, ${JSON.stringify(data.details).replace(/"/g, '&quot;')})">${t('info.editDetails')}</button></div>`;
@@ -695,10 +632,7 @@ async function renderCompanyDetail(companyId) {
     for (const doc of data.documents) {
       html += `
         <div class="doc-item">
-          <div>
-            <div class="doc-name">${escapeHtml(doc.file_name)}</div>
-            <div class="doc-meta">${escapeHtml(doc.category)} \u00B7 ${formatBytes(doc.file_size)}</div>
-          </div>
+          <div><div class="doc-name">${escapeHtml(doc.file_name)}</div><div class="doc-meta">${escapeHtml(doc.category)} \u00B7 ${formatBytes(doc.file_size)}</div></div>
           <div style="display:flex;gap:6px">
             <a class="btn btn-sm" href="/uploads/${data.id}/${doc.file_name}" target="_blank">${t('docs.view')}</a>
             <button class="btn btn-sm btn-danger" onclick="deleteDoc(${doc.id},${data.id})">${t('docs.delete')}</button>
@@ -743,16 +677,12 @@ async function triggerScan(companyId) {
   showToast(t('toast.scanStarted'), 'info');
   const result = await api(`/api/companies/${companyId}/scan`, { method: 'POST' });
   if (!result) return;
-
   const poll = setInterval(async () => {
     const scan = await api(`/api/companies/${companyId}/scan/latest`);
     if (scan && (scan.status === 'completed' || scan.status === 'failed')) {
       clearInterval(poll);
-      if (scan.status === 'completed') {
-        showToast(`${t('toast.scanComplete')} ${scan.overall_score}/100`);
-      } else {
-        showToast(t('toast.scanFailed'), 'error');
-      }
+      if (scan.status === 'completed') showToast(`${t('toast.scanComplete')} ${scan.overall_score}/100`);
+      else showToast(t('toast.scanFailed'), 'error');
       if (currentPage === 'company-detail') renderCompanyDetail(companyId);
       else navigate(currentPage);
     }
@@ -804,6 +734,742 @@ async function showFixPrompt(companyId) {
 function copyPrompt() {
   const text = document.getElementById('prompt-text').textContent;
   navigator.clipboard.writeText(text).then(() => showToast(t('fix.copied')));
+}
+
+// ==================== YouTube SEO ====================
+async function renderYouTube() {
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+
+  const [analyses, companiesData] = await Promise.all([
+    api('/api/youtube'),
+    api('/api/companies')
+  ]);
+
+  let html = `
+    <div class="feature-header">
+      <div>
+        <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${t('yt.title')}</h2>
+        <p style="font-size:13px;color:var(--text-muted)">${t('yt.subtitle')}</p>
+      </div>
+    </div>
+
+    <div class="feature-form" style="margin-bottom:24px">
+      <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:280px;margin-bottom:0">
+          <label class="form-label">YouTube URL</label>
+          <input class="form-input" id="yt-url" placeholder="${t('yt.urlPlaceholder')}">
+        </div>
+        <div class="form-group" style="width:200px;margin-bottom:0">
+          <label class="form-label">${t('yt.companyLink')} <span style="color:var(--text-muted);font-size:10px">(${t('yt.optional')})</span></label>
+          <select class="form-input" id="yt-company">
+            <option value="">—</option>
+            ${(companiesData || []).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn btn-primary" id="yt-analyze-btn" onclick="analyzeYouTube()" style="margin-bottom:0">${t('yt.analyze')}</button>
+      </div>
+    </div>`;
+
+  // History
+  html += `<h3 style="font-size:15px;font-weight:700;margin-bottom:12px">${t('yt.history')}</h3>`;
+  if (!analyses || analyses.length === 0) {
+    html += `
+      <div class="empty-state" style="padding:40px">
+        <div style="font-size:40px;margin-bottom:8px">\uD83C\uDFAC</div>
+        <div class="empty-title">${t('yt.noHistory')}</div>
+        <div class="empty-desc">${t('yt.noHistoryDesc')}</div>
+      </div>`;
+  } else {
+    html += `<div class="companies-list">`;
+    for (const a of analyses) {
+      html += `
+        <div class="company-row" onclick="navigate('youtube-detail',${a.id})">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px">${escapeHtml(a.video_title || a.youtube_url)}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(a.channel_name || '')} \u00B7 ${timeAgo(a.created_at)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-weight:700;color:${scoreColor(a.seo_score || 0)}">${a.seo_score || '\u2014'}</div>
+            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteYouTube(${a.id})">\u2717</button>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+async function analyzeYouTube() {
+  const url = document.getElementById('yt-url').value.trim();
+  if (!url) return;
+  const companyId = document.getElementById('yt-company').value;
+  const btn = document.getElementById('yt-analyze-btn');
+  btn.textContent = t('yt.analyzing');
+  btn.disabled = true;
+
+  const result = await api('/api/youtube/analyze', {
+    method: 'POST',
+    body: JSON.stringify({ url, company_id: companyId || null })
+  });
+
+  btn.textContent = t('yt.analyze');
+  btn.disabled = false;
+
+  if (result) {
+    showToast(t('toast.youtubeAnalyzed'));
+    navigate('youtube-detail', result.id);
+  }
+}
+
+async function renderYouTubeDetail(id) {
+  currentYoutubeId = id;
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+  let data = await api(`/api/youtube/${id}`);
+  if (!data) return;
+
+  // Poll until analysis is completed (runs in background)
+  if (data.status === 'analyzing' || data.status === 'pending') {
+    app.innerHTML = `<div style="text-align:center;padding:60px"><div class="spinner" style="margin:0 auto 16px"></div><div style="font-size:15px;font-weight:700">${t('yt.analyzing')}</div><div style="font-size:12px;color:var(--text-muted);margin-top:6px">${t('yt.analyzingDesc') || 'Analysiere Video-Metadaten, Tags und Engagement...'}</div></div>`;
+    let attempts = 0;
+    while (attempts < 30) { // max 60 seconds
+      await new Promise(r => setTimeout(r, 2000));
+      data = await api(`/api/youtube/${id}`);
+      if (!data || data.status === 'completed' || data.status === 'failed') break;
+      attempts++;
+    }
+    if (!data || data.status === 'failed') {
+      app.innerHTML = `<div style="text-align:center;padding:60px"><div style="font-size:40px;margin-bottom:8px">\u26A0\uFE0F</div><div style="font-weight:700">${t('yt.analysisFailed') || 'Analyse fehlgeschlagen'}</div><div style="margin-top:12px"><button class="btn" onclick="navigate('youtube')">${t('yt.backToList')}</button></div></div>`;
+      return;
+    }
+  }
+
+  // Parse JSON fields
+  const tags = JSON.parse(data.tags_json || '[]');
+  const issues = JSON.parse(data.issues_json || '[]');
+  const recommendations = JSON.parse(data.recommendations_json || '[]');
+  const scores = JSON.parse(data.analysis_data_json || '{}');
+
+  document.getElementById('header-title').textContent = data.video_title || 'YouTube Analysis';
+  document.getElementById('header-breadcrumb').textContent = '';
+
+  let html = `
+    <div class="detail-back" onclick="navigate('youtube')" style="margin-bottom:16px;cursor:pointer;font-size:13px;color:var(--text-muted)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      ${t('yt.backToList')}
+    </div>
+
+    <div style="margin-bottom:20px">
+      <h1 style="font-size:20px;font-weight:800;margin-bottom:6px">${escapeHtml(data.video_title || '')}</h1>
+      <p style="font-size:13px;color:var(--text-muted)">${escapeHtml(data.channel_name || '')} \u00B7 <a href="${escapeHtml(data.youtube_url)}" target="_blank" style="color:var(--accent-400)">YouTube \u2192</a></p>
+    </div>
+
+    ${data.thumbnail_url ? `<div style="margin-bottom:20px"><img src="${escapeHtml(data.thumbnail_url)}" style="width:100%;max-width:640px;border-radius:8px" alt="Thumbnail"></div>` : ''}
+
+    <div class="stats-grid" style="margin-bottom:20px">
+      <div class="stat-card"><div class="stat-label">${t('yt.seoScore')}</div><div class="stat-value" style="color:${scoreColor(data.seo_score || 0)}">${data.seo_score || 0}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('yt.views')}</div><div class="stat-value">${(data.view_count || 0).toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('yt.likes')}</div><div class="stat-value">${(data.like_count || 0).toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('yt.comments')}</div><div class="stat-value">${(data.comment_count || 0).toLocaleString()}</div></div>
+    </div>`;
+
+  // Score breakdown
+  if (scores && Object.keys(scores).length > 0) {
+    html += `
+      <div class="detail-scores" style="margin-bottom:20px">
+        ${[['yt.titleScore', scores.title], ['yt.descScore', scores.description], ['yt.tagScore', scores.tags], ['yt.engagementScore', scores.engagement]].filter(([, val]) => val !== undefined).map(([key, val]) => `
+          <div class="detail-score-card"><div class="label">${t(key)}</div><div class="value" style="color:${scoreColor(val || 0)}">${val || 0}</div></div>
+        `).join('')}
+      </div>`;
+  }
+
+  // Description preview
+  if (data.video_description) {
+    const desc = data.video_description.length > 300 ? data.video_description.substring(0, 300) + '...' : data.video_description;
+    html += `<div class="info-card" style="margin-bottom:16px"><div class="info-label">${t('yt.description')}</div><div style="font-size:13px;color:var(--text-secondary);margin-top:6px;white-space:pre-wrap">${escapeHtml(desc)}</div></div>`;
+  }
+
+  // Duration and publish date
+  html += `<div style="display:flex;gap:16px;margin-bottom:16px;font-size:13px;color:var(--text-muted)">`;
+  if (data.duration) html += `<span>\u23F1 ${escapeHtml(data.duration)}</span>`;
+  if (data.published_at) html += `<span>\uD83D\uDCC5 ${escapeHtml(data.published_at.split('T')[0])}</span>`;
+  html += `</div>`;
+
+  // Tags
+  if (tags && tags.length > 0) {
+    html += `<div class="info-card" style="margin-bottom:16px"><div class="info-label">${t('yt.tags')} (${tags.length})</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div></div>`;
+  }
+
+  // Issues
+  if (issues && issues.length > 0) {
+    html += `<h3 style="font-size:15px;font-weight:700;margin-bottom:10px">${t('yt.issues')}</h3>`;
+    for (const issue of issues) {
+      html += `
+        <div class="issue-item">
+          <span class="issue-severity ${issue.severity || 'warning'}">${issue.severity || 'warning'}</span>
+          <div class="issue-title">${escapeHtml(issue.title)}</div>
+          <div class="issue-desc">${escapeHtml(issue.description)}</div>
+          ${issue.fix ? `<div class="issue-fix">\u2192 ${escapeHtml(issue.fix)}</div>` : ''}
+        </div>`;
+    }
+  }
+
+  // Recommendations
+  if (recommendations && recommendations.length > 0) {
+    html += `<h3 style="font-size:15px;font-weight:700;margin:16px 0 10px">${t('yt.recommendations')}</h3>`;
+    for (const rec of recommendations) {
+      html += `<div class="issue-item"><div class="issue-fix">\u2192 ${escapeHtml(rec)}</div></div>`;
+    }
+  }
+
+  app.innerHTML = html;
+}
+
+async function deleteYouTube(id) {
+  if (!confirm(t('confirm.deleteYoutube'))) return;
+  await api(`/api/youtube/${id}`, { method: 'DELETE' });
+  showToast(t('toast.youtubeDeleted'));
+  navigate('youtube');
+}
+
+// ==================== Article Generator ====================
+async function renderArticles() {
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+
+  const [articles, companiesData, settings] = await Promise.all([
+    api('/api/articles'),
+    api('/api/companies'),
+    api('/api/settings')
+  ]);
+
+  const hasApiKey = settings && settings.llm_api_key;
+
+  let html = `
+    <div class="feature-header">
+      <div>
+        <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${t('art.title')}</h2>
+        <p style="font-size:13px;color:var(--text-muted)">${t('art.subtitle')}</p>
+      </div>
+    </div>`;
+
+  if (!hasApiKey) {
+    html += `
+      <div class="info-card" style="text-align:center;padding:32px;margin-bottom:24px;border:1px solid var(--yellow)">
+        <div style="font-size:32px;margin-bottom:8px">\uD83D\uDD11</div>
+        <div style="font-weight:700;margin-bottom:4px">${t('art.needsApiKey')}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${t('art.needsApiKeyDesc')}</div>
+        <button class="btn btn-primary" onclick="navigate('settings')">${t('art.goToSettings')}</button>
+      </div>`;
+  } else {
+    html += `
+      <div class="feature-form" style="margin-bottom:24px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">${t('art.topic')} *</label>
+            <input class="form-input" id="art-topic" placeholder="${t('art.topicPlaceholder')}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('art.keywords')}</label>
+            <input class="form-input" id="art-keywords" placeholder="${t('art.keywordsPlaceholder')}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('art.platform')}</label>
+            <select class="form-input" id="art-platform">
+              <option value="blog">${t('art.platformBlog')}</option>
+              <option value="linkedin">${t('art.platformLinkedin')}</option>
+              <option value="medium">${t('art.platformMedium')}</option>
+              <option value="newsletter">${t('art.platformNewsletter')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('art.tone')}</label>
+            <select class="form-input" id="art-tone">
+              <option value="professional">${t('art.toneProfessional')}</option>
+              <option value="conversational">${t('art.toneConversational')}</option>
+              <option value="academic">${t('art.toneAcademic')}</option>
+              <option value="persuasive">${t('art.tonePersuasive')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('art.language')}</label>
+            <select class="form-input" id="art-lang">
+              <option value="de" ${getLang() === 'de' ? 'selected' : ''}>${t('art.langDe')}</option>
+              <option value="en" ${getLang() === 'en' ? 'selected' : ''}>${t('art.langEn')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('art.companyContext')}</label>
+            <select class="form-input" id="art-company">
+              <option value="">— ${t('yt.optional')} —</option>
+              ${(companiesData || []).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="art-images" checked>
+            ${t('art.includeImages')}
+          </label>
+          <span style="font-size:11px;color:var(--text-muted)">${t('art.includeImagesDesc')}</span>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary" id="art-generate-btn" onclick="generateArticle()">${t('art.generate')}</button>
+        </div>
+      </div>`;
+  }
+
+  // History
+  html += `<h3 style="font-size:15px;font-weight:700;margin-bottom:12px">${t('art.history')}</h3>`;
+  if (!articles || articles.length === 0) {
+    html += `
+      <div class="empty-state" style="padding:40px">
+        <div style="font-size:40px;margin-bottom:8px">\uD83D\uDCDD</div>
+        <div class="empty-title">${t('art.noHistory')}</div>
+        <div class="empty-desc">${t('art.noHistoryDesc')}</div>
+      </div>`;
+  } else {
+    html += `<div class="companies-list">`;
+    for (const a of articles) {
+      html += `
+        <div class="company-row" onclick="navigate('article-detail',${a.id})">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px">${escapeHtml(a.title)}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(a.platform || '')} \u00B7 ${a.word_count || 0} ${t('art.wordCount')} \u00B7 ${timeAgo(a.created_at)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-weight:700;color:${scoreColor(a.seo_score || 0)}">${a.seo_score || '\u2014'}</div>
+            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteArticle(${a.id})">\u2717</button>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+async function generateArticle() {
+  const topic = document.getElementById('art-topic').value.trim();
+  if (!topic) return;
+  const btn = document.getElementById('art-generate-btn');
+  btn.textContent = t('art.generating');
+  btn.disabled = true;
+
+  const result = await api('/api/articles/generate', {
+    method: 'POST',
+    body: JSON.stringify({
+      topic,
+      keywords: document.getElementById('art-keywords').value,
+      platform: document.getElementById('art-platform').value,
+      tone: document.getElementById('art-tone').value,
+      language: document.getElementById('art-lang').value,
+      company_id: document.getElementById('art-company').value || null,
+      include_images: document.getElementById('art-images').checked
+    })
+  });
+
+  btn.textContent = t('art.generate');
+  btn.disabled = false;
+
+  if (result) {
+    showToast(t('toast.articleGenerated'));
+    navigate('article-detail', result.id);
+  }
+}
+
+async function renderArticleDetail(id) {
+  currentArticleId = id;
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+  const data = await api(`/api/articles/${id}`);
+  if (!data) return;
+
+  document.getElementById('header-title').textContent = data.title || 'Article';
+  document.getElementById('header-breadcrumb').textContent = '';
+
+  const readTime = Math.ceil((data.word_count || 0) / 200);
+
+  let html = `
+    <div class="detail-back" onclick="navigate('articles')" style="margin-bottom:16px;cursor:pointer;font-size:13px;color:var(--text-muted)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      ${t('art.backToList')}
+    </div>
+
+    <div style="margin-bottom:20px">
+      <h1 style="font-size:22px;font-weight:800;margin-bottom:8px">${escapeHtml(data.title)}</h1>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--text-muted);flex-wrap:wrap">
+        <span>${escapeHtml(data.platform || '')}</span>
+        <span>${data.word_count || 0} ${t('art.wordCount')}</span>
+        <span>~${readTime} ${t('art.min')} ${t('art.readTime')}</span>
+        <span style="color:${scoreColor(data.seo_score || 0)};font-weight:700">${t('art.seoScore')}: ${data.seo_score || 0}</span>
+      </div>
+    </div>`;
+
+  // Hero image
+  if (data.hero_image_url) {
+    html += `<div style="margin-bottom:20px;border-radius:8px;overflow:hidden"><img src="${escapeHtml(data.hero_image_url)}" style="width:100%;max-height:400px;object-fit:cover" alt="Hero"></div>`;
+  }
+
+  // Summary
+  if (data.summary) {
+    html += `<div class="info-card" style="margin-bottom:16px"><div class="info-label">${t('art.summary')}</div><div style="font-size:13px;margin-top:6px;line-height:1.6">${escapeHtml(data.summary)}</div></div>`;
+  }
+
+  // Content
+  html += `
+    <div class="info-card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="info-label">${t('art.content')}</div>
+        <button class="btn btn-sm" onclick="copyToClipboard(document.getElementById('article-content').innerText)">${t('art.copyContent')}</button>
+      </div>
+      <div id="article-content" style="font-size:13px;line-height:1.8;white-space:pre-wrap">${escapeHtml(data.content || '')}</div>
+    </div>`;
+
+  // Meta keywords
+  if (data.meta_keywords) {
+    html += `<div class="info-card"><div class="info-label">${t('art.keywords')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${data.meta_keywords.split(',').map(k => `<span class="tag">${escapeHtml(k.trim())}</span>`).join('')}</div></div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+async function deleteArticle(id) {
+  if (!confirm(t('confirm.deleteArticle'))) return;
+  await api(`/api/articles/${id}`, { method: 'DELETE' });
+  showToast(t('toast.articleDeleted'));
+  navigate('articles');
+}
+
+// ==================== Outreach Bot ====================
+async function renderOutreach() {
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+
+  const [campaigns, companiesData, settings] = await Promise.all([
+    api('/api/outreach'),
+    api('/api/companies'),
+    api('/api/settings')
+  ]);
+
+  const hasApiKey = settings && settings.llm_api_key;
+
+  let html = `
+    <div class="feature-header">
+      <div>
+        <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${t('out.title')}</h2>
+        <p style="font-size:13px;color:var(--text-muted)">${t('out.subtitle')}</p>
+      </div>
+    </div>`;
+
+  if (!hasApiKey) {
+    html += `
+      <div class="info-card" style="text-align:center;padding:32px;margin-bottom:24px;border:1px solid var(--yellow)">
+        <div style="font-size:32px;margin-bottom:8px">\uD83D\uDD11</div>
+        <div style="font-weight:700;margin-bottom:4px">${t('out.needsApiKey')}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${t('out.needsApiKeyDesc')}</div>
+        <button class="btn btn-primary" onclick="navigate('settings')">${t('out.goToSettings')}</button>
+      </div>`;
+  } else {
+    html += `
+      <div class="feature-form" style="margin-bottom:24px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">${t('out.platform')} *</label>
+            <select class="form-input" id="out-platform">
+              <option value="linkedin">${t('out.linkedin')}</option>
+              <option value="twitter">${t('out.twitter')}</option>
+              <option value="instagram">${t('out.instagram')}</option>
+              <option value="facebook">${t('out.facebook')}</option>
+              <option value="xing">${t('out.xing')}</option>
+              <option value="email">${t('out.email')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('out.campaignName')}</label>
+            <input class="form-input" id="out-campaign" placeholder="${t('out.campaignPlaceholder')}">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label">${t('out.topic')} *</label>
+            <textarea class="form-input" id="out-topic" rows="2" placeholder="${t('out.topicPlaceholder')}"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('out.targetAudience')}</label>
+            <input class="form-input" id="out-target" placeholder="${t('out.targetPlaceholder')}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('out.tone')}</label>
+            <select class="form-input" id="out-tone">
+              <option value="professional">${t('art.toneProfessional')}</option>
+              <option value="conversational">${t('art.toneConversational')}</option>
+              <option value="persuasive">${t('art.tonePersuasive')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('out.language')}</label>
+            <select class="form-input" id="out-lang">
+              <option value="de" ${getLang() === 'de' ? 'selected' : ''}>${t('art.langDe')}</option>
+              <option value="en" ${getLang() === 'en' ? 'selected' : ''}>${t('art.langEn')}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">${t('out.companyContext')}</label>
+            <select class="form-input" id="out-company">
+              <option value="">— ${t('yt.optional')} —</option>
+              ${(companiesData || []).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary" id="out-generate-btn" onclick="generateOutreach()">${t('out.generate')}</button>
+        </div>
+      </div>`;
+  }
+
+  // History
+  html += `<h3 style="font-size:15px;font-weight:700;margin-bottom:12px">${t('out.history')}</h3>`;
+  if (!campaigns || campaigns.length === 0) {
+    html += `
+      <div class="empty-state" style="padding:40px">
+        <div style="font-size:40px;margin-bottom:8px">\uD83D\uDCE3</div>
+        <div class="empty-title">${t('out.noHistory')}</div>
+        <div class="empty-desc">${t('out.noHistoryDesc')}</div>
+      </div>`;
+  } else {
+    html += `<div class="companies-list">`;
+    for (const c of campaigns) {
+      const platformIcons = { linkedin: '\uD83D\uDCBC', twitter: '\uD83D\uDC26', instagram: '\uD83D\uDCF7', facebook: '\uD83D\uDCF1', xing: '\uD83C\uDF10', email: '\u2709\uFE0F' };
+      html += `
+        <div class="company-row" onclick="navigate('outreach-detail',${c.id})">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px">${platformIcons[c.platform] || ''} ${escapeHtml(c.campaign_name || c.topic)}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(c.platform)} \u00B7 ${escapeHtml(c.target_audience || '')} \u00B7 ${timeAgo(c.created_at)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tag">${c.platform}</span>
+            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteOutreach(${c.id})">\u2717</button>
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+async function generateOutreach() {
+  const topic = document.getElementById('out-topic').value.trim();
+  if (!topic) return;
+  const btn = document.getElementById('out-generate-btn');
+  btn.textContent = t('out.generating');
+  btn.disabled = true;
+
+  const result = await api('/api/outreach/generate', {
+    method: 'POST',
+    body: JSON.stringify({
+      platform: document.getElementById('out-platform').value,
+      topic,
+      target_audience: document.getElementById('out-target').value,
+      campaign_name: document.getElementById('out-campaign').value,
+      tone: document.getElementById('out-tone').value,
+      language: document.getElementById('out-lang').value,
+      company_id: document.getElementById('out-company').value || null
+    })
+  });
+
+  btn.textContent = t('out.generate');
+  btn.disabled = false;
+
+  if (result) {
+    showToast(t('toast.campaignGenerated'));
+    navigate('outreach-detail', result.id);
+  }
+}
+
+async function renderOutreachDetail(id) {
+  currentCampaignId = id;
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+  const data = await api(`/api/outreach/${id}`);
+  if (!data) return;
+  const hashtags = JSON.parse(data.hashtags_json || '[]');
+
+  document.getElementById('header-title').textContent = data.campaign_name || data.topic;
+  document.getElementById('header-breadcrumb').textContent = '';
+
+  const platformIcons = { linkedin: '\uD83D\uDCBC', twitter: '\uD83D\uDC26', instagram: '\uD83D\uDCF7', facebook: '\uD83D\uDCF1', xing: '\uD83C\uDF10', email: '\u2709\uFE0F' };
+
+  let html = `
+    <div class="detail-back" onclick="navigate('outreach')" style="margin-bottom:16px;cursor:pointer;font-size:13px;color:var(--text-muted)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      ${t('out.backToList')}
+    </div>
+
+    <div style="margin-bottom:20px">
+      <h1 style="font-size:20px;font-weight:800;margin-bottom:6px">${platformIcons[data.platform] || ''} ${escapeHtml(data.campaign_name || data.topic)}</h1>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--text-muted);flex-wrap:wrap">
+        <span class="tag">${escapeHtml(data.platform)}</span>
+        <span>${escapeHtml(data.target_audience || '')}</span>
+        <span>${timeAgo(data.created_at)}</span>
+      </div>
+    </div>`;
+
+  // Hook
+  if (data.hook) {
+    html += `
+      <div class="info-card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="info-label">${t('out.hook')}</div>
+          <button class="btn btn-sm" onclick="copyToClipboard(document.getElementById('outreach-hook').innerText)">${t('out.copyHook')}</button>
+        </div>
+        <div id="outreach-hook" style="font-size:15px;font-weight:700;margin-top:8px;line-height:1.5">${escapeHtml(data.hook)}</div>
+      </div>`;
+  }
+
+  // Message
+  if (data.message_body) {
+    html += `
+      <div class="info-card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="info-label">${t('out.message')}</div>
+          <button class="btn btn-sm" onclick="copyToClipboard(document.getElementById('outreach-msg').innerText)">${t('out.copyMessage')}</button>
+        </div>
+        <div id="outreach-msg" style="font-size:13px;margin-top:8px;line-height:1.7;white-space:pre-wrap">${escapeHtml(data.message_body)}</div>
+      </div>`;
+  }
+
+  // CTA
+  if (data.call_to_action) {
+    html += `<div class="info-card" style="margin-bottom:12px"><div class="info-label">${t('out.cta')}</div><div style="font-size:14px;font-weight:600;margin-top:6px;color:var(--accent-400)">${escapeHtml(data.call_to_action)}</div></div>`;
+  }
+
+  // Hashtags
+  if (hashtags && hashtags.length > 0) {
+    html += `<div class="info-card" style="margin-bottom:12px"><div class="info-label">${t('out.hashtags')}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${hashtags.map(h => `<span class="tag">${escapeHtml(h)}</span>`).join('')}</div></div>`;
+  }
+
+  // Image prompt
+  if (data.image_prompt) {
+    html += `<div class="info-card" style="margin-bottom:12px"><div class="info-label">${t('out.imagePrompt')}</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted);font-style:italic">${escapeHtml(data.image_prompt)}</div></div>`;
+  }
+
+  // Copy all button
+  const allText = [data.hook, data.message_body, data.call_to_action, hashtags.join(' ')].filter(Boolean).join('\n\n');
+  html += `<div style="margin-top:16px"><button class="btn btn-primary" onclick="copyToClipboard(\`${allText.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`)">${t('out.copyAll')}</button></div>`;
+
+  app.innerHTML = html;
+}
+
+async function deleteOutreach(id) {
+  if (!confirm(t('confirm.deleteCampaign'))) return;
+  await api(`/api/outreach/${id}`, { method: 'DELETE' });
+  showToast(t('toast.campaignDeleted'));
+  navigate('outreach');
+}
+
+// ==================== Settings ====================
+async function renderSettings() {
+  const app = document.getElementById('main-body');
+  app.innerHTML = '<div class="spinner"></div>';
+  const settings = await api('/api/settings') || {};
+
+  let html = `
+    <div class="feature-header" style="margin-bottom:24px">
+      <div>
+        <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${t('set.title')}</h2>
+        <p style="font-size:13px;color:var(--text-muted)">${t('set.subtitle')}</p>
+      </div>
+    </div>
+
+    <div class="info-card" style="margin-bottom:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">${t('set.llmSection')}</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${t('set.llmDesc')}</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">${t('set.apiKey')}</label>
+          <input class="form-input" id="set-api-key" type="password" value="${escapeHtml(settings.llm_api_key || '')}" placeholder="${t('set.apiKeyPlaceholder')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('set.apiUrl')}</label>
+          <input class="form-input" id="set-api-url" value="${escapeHtml(settings.llm_base_url || 'https://api.openai.com/v1')}" placeholder="${t('set.apiUrlPlaceholder')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('set.apiModel')}</label>
+          <input class="form-input" id="set-api-model" value="${escapeHtml(settings.llm_model || 'gpt-4o-mini')}" placeholder="${t('set.apiModelPlaceholder')}">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+        <span style="font-size:12px;color:var(--text-muted)">${t('set.status')}:</span>
+        <span style="font-size:12px;font-weight:700;color:${settings.llm_api_key ? 'var(--green)' : 'var(--red)'}">${settings.llm_api_key ? '\u2713 ' + t('set.configured') : '\u2717 ' + t('set.notConfigured')}</span>
+      </div>
+    </div>
+
+    <div class="info-card" style="margin-bottom:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">${t('set.imageSection')}</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${t('set.imageDesc')}</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">${t('set.imageApiKey')}</label>
+          <input class="form-input" id="set-img-key" type="password" value="${escapeHtml(settings.image_api_key || '')}" placeholder="${t('set.imageApiKeyPlaceholder')}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('set.imageApiUrl')}</label>
+          <input class="form-input" id="set-img-url" value="${escapeHtml(settings.image_base_url || 'https://api.openai.com/v1')}" placeholder="${t('set.imageApiUrlPlaceholder')}">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="set-save-btn" onclick="saveSettings()">${t('set.save')}</button>
+      <button class="btn" id="set-test-btn" onclick="testLLM()">${t('set.testConnection')}</button>
+    </div>`;
+
+  app.innerHTML = html;
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('set-save-btn');
+  btn.textContent = t('set.saving');
+  btn.disabled = true;
+
+  await api('/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify({
+      llm_api_key: document.getElementById('set-api-key').value,
+      llm_base_url: document.getElementById('set-api-url').value,
+      llm_model: document.getElementById('set-api-model').value,
+      image_api_key: document.getElementById('set-img-key').value,
+      image_base_url: document.getElementById('set-img-url').value
+    })
+  });
+
+  btn.textContent = t('set.save');
+  btn.disabled = false;
+  showToast(t('toast.settingsSaved'));
+}
+
+async function testLLM() {
+  const btn = document.getElementById('set-test-btn');
+  btn.textContent = t('set.testing');
+  btn.disabled = true;
+
+  // Save first, then test
+  await saveSettings();
+  const result = await api('/api/settings/test-llm', { method: 'POST' });
+
+  btn.textContent = t('set.testConnection');
+  btn.disabled = false;
+
+  if (result && result.success) {
+    showToast(t('toast.llmTestSuccess'));
+  } else {
+    showToast(t('toast.llmTestFailed'), 'error');
+  }
 }
 
 // ==================== Modals ====================

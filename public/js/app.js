@@ -1410,7 +1410,7 @@ async function renderSettings() {
         </button>
         <button class="btn provider-btn ${currentProvider === 'custom' ? 'btn-primary' : ''}" data-provider="custom" onclick="selectProvider('custom')" style="padding:12px 8px;font-size:12px;text-align:center;line-height:1.4">
           <div style="font-weight:700;margin-bottom:2px">Custom</div>
-          <div style="font-size:10px;opacity:0.8">OpenAI-kompatibel</div>
+          <div style="font-size:10px;opacity:0.8">${t('set.customCompatible')}</div>
         </button>
       </div>
       <div id="provider-hint" style="font-size:11px;color:var(--text-muted);padding:8px 12px;background:rgba(99,102,241,0.08);border-radius:8px">
@@ -1457,7 +1457,7 @@ async function renderSettings() {
         <div class="form-group">
           <label class="form-label">${t('set.imageApiKey')}</label>
           <input class="form-input" id="set-img-key" type="password" value="${escapeHtml(settings.image_api_key || '')}" placeholder="${t('set.imageApiKeyPlaceholder')}">
-          <span style="font-size:10px;color:var(--text-muted);margin-top:2px;display:block">Leer lassen = Text-API-Key wird verwendet</span>
+          <span style="font-size:10px;color:var(--text-muted);margin-top:2px;display:block">${t('set.imageKeyHint')}</span>
         </div>
         <div class="form-group">
           <label class="form-label">${t('set.imageApiUrl')}</label>
